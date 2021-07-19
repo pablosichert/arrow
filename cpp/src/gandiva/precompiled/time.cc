@@ -543,7 +543,7 @@ DATE_TYPES(MONTHS_BETWEEN)
 
 FORCE_INLINE
 void set_error_for_date(gdv_int32 length, const char* input, const char* msg,
-                        int64_t execution_context) {
+                        void* execution_context) {
   int size = length + static_cast<int>(strlen(msg)) + 1;
   char* error = reinterpret_cast<char*>(malloc(size));
   snprintf(error, size, "%s%s", msg, input);
@@ -551,7 +551,7 @@ void set_error_for_date(gdv_int32 length, const char* input, const char* msg,
   free(error);
 }
 
-gdv_date64 castDATE_utf8(int64_t context, const char* input, gdv_int32 length) {
+gdv_date64 castDATE_utf8(void* context, const char* input, gdv_int32 length) {
   using arrow_vendored::date::day;
   using arrow_vendored::date::month;
   using arrow_vendored::date::sys_days;
@@ -615,7 +615,7 @@ gdv_date64 castDATE_utf8(int64_t context, const char* input, gdv_int32 length) {
  * Optional fields are time, displacement and zone.
  * Format is <year-month-day>[ hours:minutes:seconds][.millis][ displacement|zone]
  */
-gdv_timestamp castTIMESTAMP_utf8(int64_t context, const char* input, gdv_int32 length) {
+gdv_timestamp castTIMESTAMP_utf8(void* context, const char* input, gdv_int32 length) {
   using arrow_vendored::date::day;
   using arrow_vendored::date::month;
   using arrow_vendored::date::sys_days;
@@ -762,8 +762,8 @@ gdv_time32 castTIME_timestamp(gdv_timestamp timestamp_in_millis) {
   return static_cast<int32_t>(millis_since_midnight);
 }
 
-const char* castVARCHAR_timestamp_int64(gdv_int64 context, gdv_timestamp in,
-                                        gdv_int64 length, gdv_int32* out_len) {
+const char* castVARCHAR_timestamp_int64(void* context, gdv_timestamp in, gdv_int64 length,
+                                        gdv_int32* out_len) {
   gdv_int64 year = extractYear_timestamp(in);
   gdv_int64 month = extractMonth_timestamp(in);
   gdv_int64 day = extractDay_timestamp(in);
