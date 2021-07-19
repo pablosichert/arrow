@@ -27,7 +27,7 @@ namespace gandiva {
 TEST(TestGdvFnStubs, TestCastINT) {
   gandiva::ExecutionContext ctx;
 
-  int64_t ctx_ptr = reinterpret_cast<int64_t>(&ctx);
+  void* ctx_ptr = reinterpret_cast<void*>(&ctx);
 
   EXPECT_EQ(gdv_fn_castINT_utf8(ctx_ptr, "-45", 3), -45);
   EXPECT_EQ(gdv_fn_castINT_utf8(ctx_ptr, "0", 1), 0);
@@ -71,7 +71,7 @@ TEST(TestGdvFnStubs, TestCastINT) {
 TEST(TestGdvFnStubs, TestCastBIGINT) {
   gandiva::ExecutionContext ctx;
 
-  int64_t ctx_ptr = reinterpret_cast<int64_t>(&ctx);
+  void* ctx_ptr = reinterpret_cast<void*>(&ctx);
 
   EXPECT_EQ(gdv_fn_castBIGINT_utf8(ctx_ptr, "-45", 3), -45);
   EXPECT_EQ(gdv_fn_castBIGINT_utf8(ctx_ptr, "0", 1), 0);
@@ -121,7 +121,7 @@ TEST(TestGdvFnStubs, TestCastBIGINT) {
 TEST(TestGdvFnStubs, TestCastFloat4) {
   gandiva::ExecutionContext ctx;
 
-  int64_t ctx_ptr = reinterpret_cast<int64_t>(&ctx);
+  void* ctx_ptr = reinterpret_cast<void*>(&ctx);
 
   EXPECT_EQ(gdv_fn_castFLOAT4_utf8(ctx_ptr, "-45.34", 6), -45.34f);
   EXPECT_EQ(gdv_fn_castFLOAT4_utf8(ctx_ptr, "0", 1), 0.0f);
@@ -142,7 +142,7 @@ TEST(TestGdvFnStubs, TestCastFloat4) {
 TEST(TestGdvFnStubs, TestCastFloat8) {
   gandiva::ExecutionContext ctx;
 
-  int64_t ctx_ptr = reinterpret_cast<int64_t>(&ctx);
+  void* ctx_ptr = reinterpret_cast<void*>(&ctx);
 
   EXPECT_EQ(gdv_fn_castFLOAT8_utf8(ctx_ptr, "-45.34", 6), -45.34);
   EXPECT_EQ(gdv_fn_castFLOAT8_utf8(ctx_ptr, "0", 1), 0.0);
@@ -162,7 +162,7 @@ TEST(TestGdvFnStubs, TestCastFloat8) {
 
 TEST(TestGdvFnStubs, TestCastVARCHARFromInt32) {
   gandiva::ExecutionContext ctx;
-  uint64_t ctx_ptr = reinterpret_cast<int64_t>(&ctx);
+  void* ctx_ptr = reinterpret_cast<void*>(&ctx);
   int32_t out_len = 0;
 
   const char* out_str = gdv_fn_castVARCHAR_int32_int64(ctx_ptr, -46, 100, &out_len);
@@ -197,7 +197,7 @@ TEST(TestGdvFnStubs, TestCastVARCHARFromInt32) {
 
 TEST(TestGdvFnStubs, TestCastVARCHARFromInt64) {
   gandiva::ExecutionContext ctx;
-  uint64_t ctx_ptr = reinterpret_cast<int64_t>(&ctx);
+  void* ctx_ptr = reinterpret_cast<void*>(&ctx);
   int32_t out_len = 0;
 
   const char* out_str =
@@ -222,7 +222,7 @@ TEST(TestGdvFnStubs, TestCastVARCHARFromInt64) {
 
 TEST(TestGdvFnStubs, TestCastVARCHARFromFloat) {
   gandiva::ExecutionContext ctx;
-  uint64_t ctx_ptr = reinterpret_cast<int64_t>(&ctx);
+  void* ctx_ptr = reinterpret_cast<void*>(&ctx);
   int32_t out_len = 0;
 
   const char* out_str = gdv_fn_castVARCHAR_float32_int64(ctx_ptr, 4.567f, 100, &out_len);
@@ -257,7 +257,7 @@ TEST(TestGdvFnStubs, TestCastVARCHARFromFloat) {
 
 TEST(TestGdvFnStubs, TestCastVARCHARFromDouble) {
   gandiva::ExecutionContext ctx;
-  uint64_t ctx_ptr = reinterpret_cast<int64_t>(&ctx);
+  void* ctx_ptr = reinterpret_cast<void*>(&ctx);
   int32_t out_len = 0;
 
   const char* out_str = gdv_fn_castVARCHAR_float64_int64(ctx_ptr, 4.567, 100, &out_len);
@@ -292,7 +292,7 @@ TEST(TestGdvFnStubs, TestCastVARCHARFromDouble) {
 
 TEST(TestGdvFnStubs, TestUpper) {
   gandiva::ExecutionContext ctx;
-  uint64_t ctx_ptr = reinterpret_cast<gdv_int64>(&ctx);
+  void* ctx_ptr = reinterpret_cast<void*>(&ctx);
   gdv_int32 out_len = 0;
 
   const char* out_str = gdv_fn_upper_utf8(ctx_ptr, "AbcDEfGh", 8, &out_len);
@@ -356,7 +356,7 @@ TEST(TestGdvFnStubs, TestUpper) {
 
 TEST(TestGdvFnStubs, TestLower) {
   gandiva::ExecutionContext ctx;
-  uint64_t ctx_ptr = reinterpret_cast<gdv_int64>(&ctx);
+  void* ctx_ptr = reinterpret_cast<void*>(&ctx);
   gdv_int32 out_len = 0;
 
   const char* out_str = gdv_fn_lower_utf8(ctx_ptr, "AbcDEfGh", 8, &out_len);
@@ -420,7 +420,7 @@ TEST(TestGdvFnStubs, TestLower) {
 
 TEST(TestGdvFnStubs, TestInitCap) {
   gandiva::ExecutionContext ctx;
-  uint64_t ctx_ptr = reinterpret_cast<gdv_int64>(&ctx);
+  void* ctx_ptr = reinterpret_cast<void*>(&ctx);
   gdv_int32 out_len = 0;
 
   const char* out_str = gdv_fn_initcap_utf8(ctx_ptr, "test string", 11, &out_len);

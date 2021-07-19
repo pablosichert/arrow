@@ -69,7 +69,7 @@ TEST(TestStringOps, TestIsSubstr) {
 
 TEST(TestStringOps, TestCharLength) {
   gandiva::ExecutionContext ctx;
-  uint64_t ctx_ptr = reinterpret_cast<gdv_int64>(&ctx);
+  void* ctx_ptr = reinterpret_cast<void*>(&ctx);
 
   EXPECT_EQ(utf8_length(ctx_ptr, "hello sir", 9), 9);
 
@@ -119,7 +119,7 @@ TEST(TestStringOps, TestCharLength) {
 
 TEST(TestStringOps, TestConvertReplaceInvalidUtf8Char) {
   gandiva::ExecutionContext ctx;
-  uint64_t ctx_ptr = reinterpret_cast<gdv_int64>(&ctx);
+  void* ctx_ptr = reinterpret_cast<void*>(&ctx);
 
   // invalid utf8 (xf8 is invalid but x28 is not - x28 = '(')
   std::string a(
@@ -177,7 +177,7 @@ TEST(TestStringOps, TestConvertReplaceInvalidUtf8Char) {
 
 TEST(TestStringOps, TestCastBoolToVarchar) {
   gandiva::ExecutionContext ctx;
-  uint64_t ctx_ptr = reinterpret_cast<gdv_int64>(&ctx);
+  void* ctx_ptr = reinterpret_cast<void*>(&ctx);
   gdv_int32 out_len = 0;
 
   const char* out_str = castVARCHAR_bool_int64(ctx_ptr, true, 2, &out_len);
@@ -204,7 +204,7 @@ TEST(TestStringOps, TestCastBoolToVarchar) {
 
 TEST(TestStringOps, TestCastVarchar) {
   gandiva::ExecutionContext ctx;
-  uint64_t ctx_ptr = reinterpret_cast<gdv_int64>(&ctx);
+  void* ctx_ptr = reinterpret_cast<void*>(&ctx);
   gdv_int32 out_len = 0;
 
   // BINARY TESTS
@@ -456,7 +456,7 @@ TEST(TestStringOps, TestCastVarchar) {
 
 TEST(TestStringOps, TestSubstring) {
   gandiva::ExecutionContext ctx;
-  uint64_t ctx_ptr = reinterpret_cast<gdv_int64>(&ctx);
+  void* ctx_ptr = reinterpret_cast<void*>(&ctx);
   gdv_int32 out_len = 0;
 
   const char* out_str = substr_utf8_int64_int64(ctx_ptr, "asdf", 4, 1, 0, &out_len);
@@ -526,7 +526,7 @@ TEST(TestStringOps, TestSubstring) {
 
 TEST(TestStringOps, TestSubstringInvalidInputs) {
   gandiva::ExecutionContext ctx;
-  uint64_t ctx_ptr = reinterpret_cast<gdv_int64>(&ctx);
+  void* ctx_ptr = reinterpret_cast<void*>(&ctx);
   gdv_int32 out_len = 0;
 
   char bytes[] = {'\xA7', 'a'};
@@ -566,7 +566,7 @@ TEST(TestStringOps, TestSubstringInvalidInputs) {
 
 TEST(TestStringOps, TestConcat) {
   gandiva::ExecutionContext ctx;
-  uint64_t ctx_ptr = reinterpret_cast<gdv_int64>(&ctx);
+  void* ctx_ptr = reinterpret_cast<void*>(&ctx);
   gdv_int32 out_len = 0;
 
   const char* out_str =
@@ -697,7 +697,7 @@ TEST(TestStringOps, TestConcat) {
 
 TEST(TestStringOps, TestReverse) {
   gandiva::ExecutionContext ctx;
-  uint64_t ctx_ptr = reinterpret_cast<gdv_int64>(&ctx);
+  void* ctx_ptr = reinterpret_cast<void*>(&ctx);
   gdv_int32 out_len = 0;
 
   const char* out_str;
@@ -724,7 +724,7 @@ TEST(TestStringOps, TestReverse) {
 
 TEST(TestStringOps, TestLtrim) {
   gandiva::ExecutionContext ctx;
-  uint64_t ctx_ptr = reinterpret_cast<gdv_int64>(&ctx);
+  void* ctx_ptr = reinterpret_cast<void*>(&ctx);
   gdv_int32 out_len = 0;
   const char* out_str;
 
@@ -803,7 +803,7 @@ TEST(TestStringOps, TestLtrim) {
 
 TEST(TestStringOps, TestRtrim) {
   gandiva::ExecutionContext ctx;
-  uint64_t ctx_ptr = reinterpret_cast<gdv_int64>(&ctx);
+  void* ctx_ptr = reinterpret_cast<void*>(&ctx);
   gdv_int32 out_len = 0;
   const char* out_str;
 
@@ -888,7 +888,7 @@ TEST(TestStringOps, TestRtrim) {
 
 TEST(TestStringOps, TestBtrim) {
   gandiva::ExecutionContext ctx;
-  uint64_t ctx_ptr = reinterpret_cast<gdv_int64>(&ctx);
+  void* ctx_ptr = reinterpret_cast<void*>(&ctx);
   gdv_int32 out_len = 0;
   const char* out_str;
 
@@ -997,7 +997,7 @@ TEST(TestStringOps, TestBtrim) {
 
 TEST(TestStringOps, TestLocate) {
   gandiva::ExecutionContext ctx;
-  uint64_t ctx_ptr = reinterpret_cast<gdv_int64>(&ctx);
+  void* ctx_ptr = reinterpret_cast<void*>(&ctx);
 
   int pos;
 
@@ -1053,7 +1053,7 @@ TEST(TestStringOps, TestLocate) {
 
 TEST(TestStringOps, TestReplace) {
   gandiva::ExecutionContext ctx;
-  uint64_t ctx_ptr = reinterpret_cast<gdv_int64>(&ctx);
+  void* ctx_ptr = reinterpret_cast<void*>(&ctx);
   gdv_int32 out_len = 0;
 
   const char* out_str;
@@ -1106,7 +1106,7 @@ TEST(TestStringOps, TestReplace) {
 
 TEST(TestStringOps, TestBinaryString) {
   gandiva::ExecutionContext ctx;
-  uint64_t ctx_ptr = reinterpret_cast<gdv_int64>(&ctx);
+  void* ctx_ptr = reinterpret_cast<void*>(&ctx);
   gdv_int32 out_len = 0;
   const char* out_str;
 
@@ -1145,7 +1145,7 @@ TEST(TestStringOps, TestBinaryString) {
 
 TEST(TestStringOps, TestSplitPart) {
   gandiva::ExecutionContext ctx;
-  uint64_t ctx_ptr = reinterpret_cast<gdv_int64>(&ctx);
+  void* ctx_ptr = reinterpret_cast<void*>(&ctx);
   gdv_int32 out_len = 0;
   const char* out_str;
 
@@ -1195,7 +1195,7 @@ TEST(TestStringOps, TestSplitPart) {
 
 TEST(TestStringOps, TestConvertTo) {
   gandiva::ExecutionContext ctx;
-  uint64_t ctx_ptr = reinterpret_cast<gdv_int64>(&ctx);
+  void* ctx_ptr = reinterpret_cast<void*>(&ctx);
   gdv_int32 out_len = 0;
   const char* out_str;
 
@@ -1230,7 +1230,7 @@ TEST(TestStringOps, TestConvertTo) {
 
 TEST(TestStringOps, TestConvertToBigEndian) {
   gandiva::ExecutionContext ctx;
-  uint64_t ctx_ptr = reinterpret_cast<gdv_int64>(&ctx);
+  void* ctx_ptr = reinterpret_cast<void*>(&ctx);
   gdv_int32 out_len = 0;
   gdv_int32 out_len_big_endian = 0;
   const char* out_str;

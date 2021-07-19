@@ -20,7 +20,9 @@
 #endif
 
 #include <gtest/gtest.h>
+
 #include <cmath>
+
 #include "gandiva/execution_context.h"
 #include "gandiva/precompiled/types.h"
 
@@ -78,14 +80,14 @@ TEST(TestExtendedMathOps, TestPower) {
 TEST(TestExtendedMathOps, TestLogWithBase) {
   gandiva::ExecutionContext context;
   gdv_float64 out =
-      log_int32_int32(reinterpret_cast<gdv_int64>(&context), 1 /*base*/, 10 /*value*/);
+      log_int32_int32(reinterpret_cast<void*>(&context), 1 /*base*/, 10 /*value*/);
   VerifyFuzzyEquals(out, 0);
   EXPECT_EQ(context.has_error(), true);
   EXPECT_TRUE(context.get_error().find("divide by zero error") != std::string::npos)
       << context.get_error();
 
   gandiva::ExecutionContext context1;
-  out = log_int32_int32(reinterpret_cast<gdv_int64>(&context), 2 /*base*/, 64 /*value*/);
+  out = log_int32_int32(reinterpret_cast<void*>(&context), 2 /*base*/, 64 /*value*/);
   VerifyFuzzyEquals(out, 6);
   EXPECT_EQ(context1.has_error(), false);
 }
