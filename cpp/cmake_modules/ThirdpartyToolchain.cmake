@@ -1509,6 +1509,7 @@ if(ARROW_JEMALLOC)
               "--with-private-namespace=je_arrow_private_"
               "--without-export"
               "--disable-shared"
+	      "--with-lg-vaddr=32"
               # Don't override operator new()
               "--disable-cxx" "--disable-libdl"
               # See https://github.com/jemalloc/jemalloc/issues/1237

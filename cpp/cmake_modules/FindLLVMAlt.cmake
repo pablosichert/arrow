@@ -19,20 +19,23 @@
 #
 #  find_package(LLVMAlt)
 
-set(LLVM_HINTS ${LLVM_ROOT} ${LLVM_DIR} /usr/lib /usr/share)
-if(LLVM_BREW_PREFIX)
-  list(APPEND LLVM_HINTS ${LLVM_BREW_PREFIX})
-endif()
-foreach(ARROW_LLVM_VERSION ${ARROW_LLVM_VERSIONS})
-  find_package(LLVM
-               ${ARROW_LLVM_VERSION}
-               CONFIG
-               HINTS
-               ${LLVM_HINTS})
-  if(LLVM_FOUND)
-    break()
-  endif()
-endforeach()
+# set(LLVM_HINTS ${LLVM_ROOT} ${LLVM_DIR} /usr/lib /usr/share)
+# if(LLVM_BREW_PREFIX)
+#   list(APPEND LLVM_HINTS ${LLVM_BREW_PREFIX})
+# endif()
+# foreach(ARROW_LLVM_VERSION ${ARROW_LLVM_VERSIONS})
+#   find_package(LLVM
+#                ${ARROW_LLVM_VERSION}
+#                CONFIG
+#                HINTS
+#                ${LLVM_HINTS})
+#   if(LLVM_FOUND)
+#     break()
+#   endif()
+# endforeach()
+
+message(STATUS "LLVM_DIR is ${LLVM_DIR}")
+find_package(LLVM REQUIRED CONFIG)
 
 if(LLVM_FOUND)
   # Find the libraries that correspond to the LLVM components

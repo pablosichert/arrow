@@ -249,3 +249,25 @@ endif()
 
 add_subdirectory(precompiled)
 add_subdirectory(tests)
+
+set(CMAKE_EXECUTABLE_SUFFIX .html)
+
+add_executable(gandiva_wasm main.cc)
+target_link_libraries(gandiva_wasm gandiva_static LLVM::LLVM_INTERFACE)
+set_property(TARGET gandiva_wasm PROPERTY POSITION_INDEPENDENT_CODE ON)
+set_target_properties(
+    gandiva_wasm
+    PROPERTIES
+      LINK_FLAGS
+      " \
+        -fwasm-exceptions \
+        -s ASSERTIONS=1 \
+        -s EXPORTED_RUNTIME_METHODS=ccall \
+      "
+)
+
+# -s ASSERTIONS=1 \
+# -s MAIN_MODULE=2 \
+# -s EXPORT_ALL=1 \
+# -s RELOCATABLE=1 \
+# -s EMCC_FORCE_STDLIBS=1 \

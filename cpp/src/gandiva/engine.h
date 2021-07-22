@@ -22,12 +22,12 @@
 #include <string>
 #include <vector>
 
-#include "arrow/util/macros.h"
-
 #include "arrow/util/logging.h"
+#include "arrow/util/macros.h"
 #include "gandiva/configuration.h"
 #include "gandiva/llvm_includes.h"
 #include "gandiva/llvm_types.h"
+#include "gandiva/selection_vector.h"
 #include "gandiva/visibility.h"
 
 namespace gandiva {
@@ -59,6 +59,9 @@ class GANDIVA_EXPORT Engine {
 
   /// Get the compiled function corresponding to the irfunction.
   void* CompiledFunction(llvm::Function* irFunction);
+
+  /// Set the compiled function corresponding to the irfunction.
+  void SetCompiledFunction(llvm::Function* irFunction, SelectionVector::Mode mode);
 
   // Create and add a mapping for the cpp function to make it accessible from LLVM.
   void AddGlobalMappingForFunc(const std::string& name, llvm::Type* ret_type,

@@ -17,6 +17,8 @@
 
 #include "gandiva/llvm_generator.h"
 
+#include <emscripten.h>
+
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -42,10 +44,14 @@ LLVMGenerator::LLVMGenerator() : enable_ir_traces_(false) {}
 
 Status LLVMGenerator::Make(std::shared_ptr<Configuration> config,
                            std::unique_ptr<LLVMGenerator>* llvm_generator) {
+  std::cout << "LLVMGenerator::Make 1" << std::endl;
   std::unique_ptr<LLVMGenerator> llvmgen_obj(new LLVMGenerator());
+  std::cout << "LLVMGenerator::Make 2" << std::endl;
 
   ARROW_RETURN_NOT_OK(Engine::Make(config, &(llvmgen_obj->engine_)));
+  std::cout << "LLVMGenerator::Make 3" << std::endl;
   *llvm_generator = std::move(llvmgen_obj);
+  std::cout << "LLVMGenerator::Make 4" << std::endl;
 
   return Status::OK();
 }
@@ -70,21 +76,33 @@ Status LLVMGenerator::Add(const ExpressionPtr expr, const FieldDescriptorPtr out
 
 /// Build and optimise module for projection expression.
 Status LLVMGenerator::Build(const ExpressionVector& exprs, SelectionVector::Mode mode) {
+  std::cout << "Status LLVMGenerator::Build 1" << std::endl;
   selection_vector_mode_ = mode;
   for (auto& expr : exprs) {
+    std::cout << "Status LLVMGenerator::Build 1.1" << std::endl;
     auto output = annotator_.AddOutputFieldDescriptor(expr->result());
+    std::cout << "Status LLVMGenerator::Build 1.2" << std::endl;
     ARROW_RETURN_NOT_OK(Add(expr, output));
   }
+
+  std::cout << "Status LLVMGenerator::Build 2" << std::endl;
 
   // Compile and inject into the process' memory the generated function.
   ARROW_RETURN_NOT_OK(engine_->FinalizeModule());
 
+  std::cout << "Status LLVMGenerator::Build 3" << std::endl;
+
   // setup the jit functions for each expression.
   for (auto& compiled_expr : compiled_exprs_) {
+    std::cout << "Status LLVMGenerator::Build 3.1" << std::endl;
     auto ir_fn = compiled_expr->GetIRFunction(mode);
-    auto jit_fn = reinterpret_cast<EvalFunc>(engine_->CompiledFunction(ir_fn));
-    compiled_expr->SetJITFunction(selection_vector_mode_, jit_fn);
+    std::cout << "Status LLVMGenerator::Build 3.2" << std::endl;
+    engine_->SetCompiledFunction(ir_fn, selection_vector_mode_);
+    std::cout << "Status LLVMGenerator::Build 3.3" << std::endl;
+    // compiled_expr->SetJITFunction(selection_vector_mode_, jit_fn);
+    std::cout << "Status LLVMGenerator::Build 3.4" << std::endl;
   }
+  std::cout << "Status LLVMGenerator::Build 4" << std::endl;
 
   return Status::OK();
 }
@@ -92,6 +110,7 @@ Status LLVMGenerator::Build(const ExpressionVector& exprs, SelectionVector::Mode
 /// Execute the compiled module against the provided vectors.
 Status LLVMGenerator::Execute(const arrow::RecordBatch& record_batch,
                               const ArrayDataVector& output_vector) {
+  std::cout << "Status LLVMGenerator::Execute A" << std::endl;
   return Execute(record_batch, nullptr, output_vector);
 }
 
@@ -100,42 +119,102 @@ Status LLVMGenerator::Execute(const arrow::RecordBatch& record_batch,
 Status LLVMGenerator::Execute(const arrow::RecordBatch& record_batch,
                               const SelectionVector* selection_vector,
                               const ArrayDataVector& output_vector) {
+  std::cout << "Status LLVMGenerator::Execute 1" << std::endl;
   DCHECK_GT(record_batch.num_rows(), 0);
 
+  std::cout << "Status LLVMGenerator::Execute 2" << std::endl;
   auto eval_batch = annotator_.PrepareEvalBatch(record_batch, output_vector);
   DCHECK_GT(eval_batch->GetNumBuffers(), 0);
+  std::cout << "Status LLVMGenerator::Execute 3" << std::endl;
 
   auto mode = SelectionVector::MODE_NONE;
   if (selection_vector != nullptr) {
+    std::cout << "Status LLVMGenerator::Execute 3.1" << std::endl;
     mode = selection_vector->GetMode();
   }
+  std::cout << "Status LLVMGenerator::Execute 4" << std::endl;
   if (mode != selection_vector_mode_) {
+    std::cout << "Status LLVMGenerator::Execute 4.1" << std::endl;
     return Status::Invalid("llvm expression built for selection vector mode ",
                            selection_vector_mode_, " received vector with mode ", mode);
   }
 
+  std::cout << "Status LLVMGenerator::Execute 5" << std::endl;
+
   for (auto& compiled_expr : compiled_exprs_) {
+    std::cout << "Status LLVMGenerator::Execute 6" << std::endl;
     // generate data/offset vectors.
     const uint8_t* selection_buffer = nullptr;
     auto num_output_rows = record_batch.num_rows();
     if (selection_vector != nullptr) {
+      std::cout << "Status LLVMGenerator::Execute 6.1" << std::endl;
       selection_buffer = selection_vector->GetBuffer().data();
       num_output_rows = selection_vector->GetNumSlots();
     }
 
-    EvalFunc jit_function = compiled_expr->GetJITFunction(mode);
-    jit_function(eval_batch->GetBufferArray(), eval_batch->GetBufferOffsetArray(),
-                 eval_batch->GetLocalBitMapArray(), selection_buffer,
-                 (void*)eval_batch->GetExecutionContext(), num_output_rows);
+    std::cout << "Status LLVMGenerator::Execute 7" << std::endl;
+    {
+      auto* inputs_addr = eval_batch->GetBufferArray();
+      auto* inputs_addr_offsets = eval_batch->GetBufferOffsetArray();
+      auto* local_bitmaps = eval_batch->GetLocalBitMapArray();
+      auto* selection_vector = selection_buffer;
+      auto* context_ptr = eval_batch->GetExecutionContext();
+      auto nrecords = (size_t)num_output_rows;
+
+      std::cout << "mode: " << mode << std::endl;
+      std::cout << "inputs_addr: " << reinterpret_cast<uintptr_t>(inputs_addr)
+                << std::endl;
+      std::cout << "inputs_addr_offsets: "
+                << reinterpret_cast<uintptr_t>(inputs_addr_offsets) << std::endl;
+      std::cout << "local_bitmaps: " << reinterpret_cast<uintptr_t>(local_bitmaps)
+                << std::endl;
+      std::cout << "selection_vector: " << reinterpret_cast<uintptr_t>(selection_vector)
+                << std::endl;
+      std::cout << "context_ptr: " << reinterpret_cast<uintptr_t>(context_ptr)
+                << std::endl;
+      std::cout << "nrecords: " << nrecords << std::endl;
+
+      EM_ASM(
+          {
+            const mode = $0;
+            const inputs_addr = $1;
+            const inputs_addr_offsets = $2;
+            const local_bitmaps = $3;
+            const selection_vector = $4;
+            const context_ptr = $5;
+            const nrecords = BigInt($6);
+
+            console.log("JS mode:", mode);
+            console.log("JS inputs_addr:", inputs_addr);
+            console.log("JS inputs_addr_offsets:", inputs_addr_offsets);
+            console.log("JS local_bitmaps:", local_bitmaps);
+            console.log("JS selection_vector:", selection_vector);
+            console.log("JS context_ptr:", context_ptr);
+            console.log("JS nrecords:", nrecords);
+
+            window.jitFunctions[mode](inputs_addr, inputs_addr_offsets, local_bitmaps,
+                                      selection_vector, context_ptr, nrecords);
+          },
+          mode, inputs_addr, inputs_addr_offsets, local_bitmaps, selection_vector,
+          context_ptr, nrecords);
+    }
+
+    std::cout << "Status LLVMGenerator::Execute 8" << std::endl;
 
     // check for execution errors
     ARROW_RETURN_IF(
         eval_batch->GetExecutionContext()->has_error(),
         Status::ExecutionError(eval_batch->GetExecutionContext()->get_error()));
 
+    std::cout << "Status LLVMGenerator::Execute 9" << std::endl;
+
     // generate validity vectors.
     ComputeBitMapsForExpr(*compiled_expr, *eval_batch, selection_vector);
+
+    std::cout << "Status LLVMGenerator::Execute 10" << std::endl;
   }
+
+  std::cout << "Status LLVMGenerator::Execute 11" << std::endl;
 
   return Status::OK();
 }
@@ -276,6 +355,7 @@ Status LLVMGenerator::CodeGenExprValue(DexPtr value_expr, int buffer_count,
   *fn = llvm::Function::Create(prototype, llvm::GlobalValue::ExternalLinkage, func_name,
                                module());
   ARROW_RETURN_IF((*fn == nullptr), Status::CodeGenError("Error creating function."));
+  (*fn)->addFnAttr("wasm-export-name", "_start");
 
   // Name the arguments
   llvm::Function::arg_iterator args = (*fn)->arg_begin();

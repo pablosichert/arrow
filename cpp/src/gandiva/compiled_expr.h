@@ -40,18 +40,22 @@ class CompiledExpr {
   FieldDescriptorPtr output() const { return output_; }
 
   void SetIRFunction(SelectionVector::Mode mode, llvm::Function* ir_function) {
+    std::cout << "void SetIRFunction" << std::endl;
     ir_functions_[static_cast<int>(mode)] = ir_function;
   }
 
   llvm::Function* GetIRFunction(SelectionVector::Mode mode) const {
+    std::cout << "llvm::Function* GetIRFunction" << std::endl;
     return ir_functions_[static_cast<int>(mode)];
   }
 
   void SetJITFunction(SelectionVector::Mode mode, EvalFunc jit_function) {
+    std::cout << "void SetJITFunction" << std::endl;
     jit_functions_[static_cast<int>(mode)] = jit_function;
   }
 
   EvalFunc GetJITFunction(SelectionVector::Mode mode) const {
+    std::cout << "EvalFunc GetJITFunction" << std::endl;
     return jit_functions_[static_cast<int>(mode)];
   }
 

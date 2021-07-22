@@ -17,6 +17,7 @@
 
 #include "arrow/builder.h"
 
+#include <iostream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -108,8 +109,10 @@ Result<std::vector<std::shared_ptr<ArrayBuilder>>> FieldBuilders(const DataType&
 
 Status MakeBuilder(MemoryPool* pool, const std::shared_ptr<DataType>& type,
                    std::unique_ptr<ArrayBuilder>* out) {
+  std::cout << "MakeBuilder 1" << std::endl;
   switch (type->id()) {
     case Type::NA: {
+      std::cout << "case Type::NA" << std::endl;
       out->reset(new NullBuilder(pool));
       return Status::OK();
     }
@@ -142,6 +145,7 @@ Status MakeBuilder(MemoryPool* pool, const std::shared_ptr<DataType>& type,
       BUILDER_CASE(Decimal256);
 
     case Type::DICTIONARY: {
+      std::cout << "case Type::DICTIONARY" << std::endl;
       const auto& dict_type = static_cast<const DictionaryType&>(*type);
       DictionaryBuilderCase visitor = {pool, dict_type.index_type(),
                                        dict_type.value_type(), nullptr, out};
@@ -149,6 +153,7 @@ Status MakeBuilder(MemoryPool* pool, const std::shared_ptr<DataType>& type,
     }
 
     case Type::LIST: {
+      std::cout << "case Type::LIST" << std::endl;
       std::unique_ptr<ArrayBuilder> value_builder;
       std::shared_ptr<DataType> value_type =
           internal::checked_cast<const ListType&>(*type).value_type();
@@ -158,6 +163,7 @@ Status MakeBuilder(MemoryPool* pool, const std::shared_ptr<DataType>& type,
     }
 
     case Type::LARGE_LIST: {
+      std::cout << "case Type::LARGE_LIST" << std::endl;
       std::unique_ptr<ArrayBuilder> value_builder;
       std::shared_ptr<DataType> value_type =
           internal::checked_cast<const LargeListType&>(*type).value_type();
@@ -167,6 +173,7 @@ Status MakeBuilder(MemoryPool* pool, const std::shared_ptr<DataType>& type,
     }
 
     case Type::MAP: {
+      std::cout << "case Type::MAP" << std::endl;
       const auto& map_type = internal::checked_cast<const MapType&>(*type);
       std::unique_ptr<ArrayBuilder> key_builder, item_builder;
       RETURN_NOT_OK(MakeBuilder(pool, map_type.key_type(), &key_builder));
@@ -177,6 +184,7 @@ Status MakeBuilder(MemoryPool* pool, const std::shared_ptr<DataType>& type,
     }
 
     case Type::FIXED_SIZE_LIST: {
+      std::cout << "case Type::FIXED_SIZE_LIST" << std::endl;
       const auto& list_type = internal::checked_cast<const FixedSizeListType&>(*type);
       std::unique_ptr<ArrayBuilder> value_builder;
       auto value_type = list_type.value_type();
@@ -186,24 +194,28 @@ Status MakeBuilder(MemoryPool* pool, const std::shared_ptr<DataType>& type,
     }
 
     case Type::STRUCT: {
+      std::cout << "case Type::STRUCT" << std::endl;
       ARROW_ASSIGN_OR_RAISE(auto field_builders, FieldBuilders(*type, pool));
       out->reset(new StructBuilder(type, pool, std::move(field_builders)));
       return Status::OK();
     }
 
     case Type::SPARSE_UNION: {
+      std::cout << "case Type::SPARSE_UNION" << std::endl;
       ARROW_ASSIGN_OR_RAISE(auto field_builders, FieldBuilders(*type, pool));
       out->reset(new SparseUnionBuilder(pool, std::move(field_builders), type));
       return Status::OK();
     }
 
     case Type::DENSE_UNION: {
+      std::cout << "case Type::DENSE_UNION" << std::endl;
       ARROW_ASSIGN_OR_RAISE(auto field_builders, FieldBuilders(*type, pool));
       out->reset(new DenseUnionBuilder(pool, std::move(field_builders), type));
       return Status::OK();
     }
 
     default:
+      std::cout << "default" << std::endl;
       break;
   }
   return Status::NotImplemented("MakeBuilder: cannot construct builder for type ",

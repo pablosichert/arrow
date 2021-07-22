@@ -24,7 +24,6 @@
 
 #include "arrow/util/hash_util.h"
 #include "arrow/util/logging.h"
-
 #include "gandiva/cache.h"
 #include "gandiva/expr_validator.h"
 #include "gandiva/llvm_generator.h"
@@ -234,6 +233,7 @@ Status Projector::Evaluate(const arrow::RecordBatch& batch, arrow::MemoryPool* p
 Status Projector::Evaluate(const arrow::RecordBatch& batch,
                            const SelectionVector* selection_vector,
                            arrow::MemoryPool* pool, arrow::ArrayVector* output) {
+  std::cout << "Projector::Evaluate 1" << std::endl;
   ARROW_RETURN_NOT_OK(ValidateEvaluateArgsCommon(batch));
   ARROW_RETURN_IF(output == nullptr, Status::Invalid("Output must be non-null."));
   ARROW_RETURN_IF(pool == nullptr, Status::Invalid("Memory pool must be non-null."));
@@ -249,6 +249,10 @@ Status Projector::Evaluate(const arrow::RecordBatch& batch,
     output_data_vecs.push_back(output_data);
   }
 
+  for (auto& o : *output) {
+    std::cout << "Projector::Evaluate output before: " << o->ToString() << std::endl;
+  }
+
   // Execute the expression(s).
   ARROW_RETURN_NOT_OK(
       llvm_generator_->Execute(batch, selection_vector, output_data_vecs));
@@ -257,6 +261,10 @@ Status Projector::Evaluate(const arrow::RecordBatch& batch,
   output->clear();
   for (auto& array_data : output_data_vecs) {
     output->push_back(arrow::MakeArray(array_data));
+  }
+
+  for (auto& o : *output) {
+    std::cout << "Projector::Evaluate output after: " << o->ToString() << std::endl;
   }
   return Status::OK();
 }

@@ -17,13 +17,13 @@
 
 #include "gandiva/filter.h"
 
+#include <iostream>
 #include <memory>
 #include <thread>
 #include <utility>
 #include <vector>
 
 #include "arrow/util/hash_util.h"
-
 #include "gandiva/bitmap_accumulator.h"
 #include "gandiva/cache.h"
 #include "gandiva/condition.h"
@@ -110,9 +110,13 @@ Status Filter::Make(SchemaPtr schema, ConditionPtr condition,
     return Status::OK();
   }
 
+  std::cout << "Status Filter::Make 1" << std::endl;
+
   // Build LLVM generator, and generate code for the specified expression
   std::unique_ptr<LLVMGenerator> llvm_gen;
   ARROW_RETURN_NOT_OK(LLVMGenerator::Make(configuration, &llvm_gen));
+
+  std::cout << "Status Filter::Make 2" << std::endl;
 
   // Run the validation on the expression.
   // Return if the expression is invalid since we will not be able to process further.
@@ -120,16 +124,24 @@ Status Filter::Make(SchemaPtr schema, ConditionPtr condition,
   ARROW_RETURN_NOT_OK(expr_validator.Validate(condition));
   ARROW_RETURN_NOT_OK(llvm_gen->Build({condition}, SelectionVector::Mode::MODE_NONE));
 
+  std::cout << "Status Filter::Make 3" << std::endl;
+
   // Instantiate the filter with the completely built llvm generator
   *filter = std::make_shared<Filter>(std::move(llvm_gen), schema, configuration);
+
+  std::cout << "Status Filter::Make 4" << std::endl;
   cache.PutModule(cache_key, *filter);
+
+  std::cout << "Status Filter::Make 5" << std::endl;
 
   return Status::OK();
 }
 
 Status Filter::Evaluate(const arrow::RecordBatch& batch,
                         std::shared_ptr<SelectionVector> out_selection) {
+  std::cout << "Status Filter::Evaluate 1" << std::endl;
   const auto num_rows = batch.num_rows();
+  std::cout << "Status Filter::Evaluate 2" << std::endl;
   ARROW_RETURN_IF(!batch.schema()->Equals(*schema_),
                   Status::Invalid("RecordBatch schema must expected filter schema"));
   ARROW_RETURN_IF(num_rows == 0, Status::Invalid("RecordBatch must be non-empty."));
@@ -137,23 +149,32 @@ Status Filter::Evaluate(const arrow::RecordBatch& batch,
                   Status::Invalid("out_selection must be non-null."));
   ARROW_RETURN_IF(out_selection->GetMaxSlots() < num_rows,
                   Status::Invalid("Output selection vector capacity too small"));
+  std::cout << "Status Filter::Evaluate 3" << std::endl;
 
   // Allocate three local_bitmaps (one for output, one for validity, one to compute the
   // intersection).
   LocalBitMapsHolder bitmaps(num_rows, 3 /*local_bitmaps*/);
   int64_t bitmap_size = bitmaps.GetLocalBitMapSize();
 
+  std::cout << "Status Filter::Evaluate 4" << std::endl;
+
   auto validity = std::make_shared<arrow::Buffer>(bitmaps.GetLocalBitMap(0), bitmap_size);
   auto value = std::make_shared<arrow::Buffer>(bitmaps.GetLocalBitMap(1), bitmap_size);
   auto array_data = arrow::ArrayData::Make(arrow::boolean(), num_rows, {validity, value});
 
+  std::cout << "Status Filter::Evaluate 5" << std::endl;
+
   // Execute the expression(s).
   ARROW_RETURN_NOT_OK(llvm_generator_->Execute(batch, {array_data}));
+
+  std::cout << "Status Filter::Evaluate 6" << std::endl;
 
   // Compute the intersection of the value and validity.
   auto result = bitmaps.GetLocalBitMap(2);
   BitMapAccumulator::IntersectBitMaps(
       result, {bitmaps.GetLocalBitMap(0), bitmaps.GetLocalBitMap((1))}, {0, 0}, num_rows);
+
+  std::cout << "Status Filter::Evaluate 7" << std::endl;
 
   return out_selection->PopulateFromBitMap(result, bitmap_size, num_rows - 1);
 }

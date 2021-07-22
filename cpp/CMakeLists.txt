@@ -448,7 +448,7 @@ if(ARROW_EXTRA_ERROR_CONTEXT)
   add_definitions(-DARROW_EXTRA_ERROR_CONTEXT)
 endif()
 
-include(SetupCxxFlags)
+# include(SetupCxxFlags)
 
 #
 # Build output directory

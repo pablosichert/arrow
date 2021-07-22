@@ -31,7 +31,11 @@
 #define __EXTENSIONS__
 #endif
 
-#include "arrow/util/windows_compatibility.h"  // IWYU pragma: keep
+#include <fcntl.h>
+#include <signal.h>
+#include <stdlib.h>
+#include <sys/stat.h>
+#include <sys/types.h>  // IWYU pragma: keep
 
 #include <algorithm>
 #include <cerrno>
@@ -44,11 +48,7 @@
 #include <utility>
 #include <vector>
 
-#include <fcntl.h>
-#include <signal.h>
-#include <stdlib.h>
-#include <sys/stat.h>
-#include <sys/types.h>  // IWYU pragma: keep
+#include "arrow/util/windows_compatibility.h"  // IWYU pragma: keep
 
 // ----------------------------------------------------------------------
 // file compatibility stuff
@@ -1671,14 +1671,14 @@ Status SendSignalToThread(int signum, uint64_t thread_id) {
   return Status::NotImplemented("Cannot send signal to specific thread on Windows");
 #else
   // Have to use a C-style cast because pthread_t can be a pointer *or* integer type
-  int r = pthread_kill((pthread_t)thread_id, signum);  // NOLINT readability-casting
-  if (r == 0) {
-    return Status::OK();
-  }
-  if (r == EINVAL) {
-    return Status::Invalid("Invalid signal number ", signum);
-  }
-  return IOErrorFromErrno(r, "Failed to raise signal");
+  // int r = pthread_kill((pthread_t)thread_id, signum);  // NOLINT readability-casting
+  // if (r == 0) {
+  //   return Status::OK();
+  // }
+  // if (r == EINVAL) {
+  //   return Status::Invalid("Invalid signal number ", signum);
+  // }
+  // return IOErrorFromErrno(r, "Failed to raise signal");
 #endif
 }
 
