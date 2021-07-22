@@ -279,9 +279,9 @@ test_that("Timezone handling in Arrow roundtrip (ARROW-3543)", {
   # Write a feather file as that's what the initial bug report used
   df <- tibble::tibble(
     no_tz = lubridate::ymd_hms("2018-10-07 19:04:05") + 1:10,
-    yes_tz = lubridate::ymd_hms("2018-10-07 19:04:05", tz = "Asia/Pyongyang") + 1:10
+    yes_tz = lubridate::ymd_hms("2018-10-07 19:04:05", tz = "Pacific/Marquesas") + 1:10
   )
-  if (!identical(Sys.timezone(), "Asia/Pyongyang")) {
+  if (!identical(Sys.timezone(), "Pacific/Marquesas")) {
     # Confirming that the columns are in fact different
     expect_false(any(df$no_tz == df$yes_tz))
   }
@@ -315,6 +315,23 @@ test_that("support for NaN (ARROW-3615)", {
   y <- Array$create(x)
   expect_true(y$IsValid(2))
   expect_equal(y$null_count, 1L)
+})
+
+test_that("is.nan() evalutes to FALSE on NA (for consistency with base R)", {
+  x <- c(1.0, NA, NaN, -1.0)
+  expect_vector_equal(is.nan(input), x)
+})
+
+test_that("is.nan() evalutes to FALSE on non-floats (for consistency with base R)", {
+  x <- c(1L, 2L, 3L)
+  y <- c("foo", "bar")
+  expect_vector_equal(is.nan(input), x)
+  expect_vector_equal(is.nan(input), y)
+})
+
+test_that("is.na() evalutes to TRUE on NaN (for consistency with base R)", {
+  x <- c(1, NA, NaN, -1)
+  expect_vector_equal(is.na(input), x)
 })
 
 test_that("integer types casts (ARROW-3741)", {
@@ -818,4 +835,24 @@ test_that("auto int64 conversion to int can be disabled (ARROW-10093)", {
     tab <- Table$create(x = a)
     expect_true(inherits(as.data.frame(batch)$x, "integer64"))
   })
+})
+
+
+test_that("Array to C-interface", {
+  # create a struct array since that's one of the more complicated array types
+  df <- tibble::tibble(x = 1:10, y = x / 2, z = letters[1:10])
+  arr <- Array$create(df)
+
+  # export the array via the C-interface
+  schema_ptr <- allocate_arrow_schema()
+  array_ptr <- allocate_arrow_array()
+  arr$export_to_c(array_ptr, schema_ptr)
+
+  # then import it and check that the roundtripped value is the same
+  circle <- Array$import_from_c(array_ptr, schema_ptr)
+  expect_equal(arr, circle)
+
+  # must clean up the pointers or we leak
+  delete_arrow_schema(schema_ptr)
+  delete_arrow_array(array_ptr)
 })

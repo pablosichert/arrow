@@ -128,12 +128,12 @@ class DummyHandler(FileSystemHandler):
         data = "{0}:input_file".format(path).encode('utf8')
         return pa.BufferReader(data)
 
-    def open_output_stream(self, path):
+    def open_output_stream(self, path, metadata):
         if "notfound" in path:
             raise FileNotFoundError(path)
         return pa.BufferOutputStream()
 
-    def open_append_stream(self, path):
+    def open_append_stream(self, path, metadata):
         if "notfound" in path:
             raise FileNotFoundError(path)
         return pa.BufferOutputStream()
@@ -193,11 +193,11 @@ class ProxyHandler(FileSystemHandler):
     def open_input_file(self, path):
         return self._fs.open_input_file(path)
 
-    def open_output_stream(self, path):
-        return self._fs.open_output_stream(path)
+    def open_output_stream(self, path, metadata):
+        return self._fs.open_output_stream(path, metadata=metadata)
 
-    def open_append_stream(self, path):
-        return self._fs.open_append_stream(path)
+    def open_append_stream(self, path, metadata):
+        return self._fs.open_append_stream(path, metadata=metadata)
 
 
 @pytest.fixture
@@ -205,7 +205,6 @@ def localfs(request, tempdir):
     return dict(
         fs=LocalFileSystem(),
         pathfn=lambda p: (tempdir / p).as_posix(),
-        allow_copy_file=True,
         allow_move_dir=True,
         allow_append_to_file=True,
     )
@@ -216,7 +215,6 @@ def py_localfs(request, tempdir):
     return dict(
         fs=PyFileSystem(ProxyHandler(LocalFileSystem())),
         pathfn=lambda p: (tempdir / p).as_posix(),
-        allow_copy_file=True,
         allow_move_dir=True,
         allow_append_to_file=True,
     )
@@ -227,7 +225,6 @@ def mockfs(request):
     return dict(
         fs=_MockFileSystem(),
         pathfn=lambda p: p,
-        allow_copy_file=True,
         allow_move_dir=True,
         allow_append_to_file=True,
     )
@@ -238,7 +235,6 @@ def py_mockfs(request):
     return dict(
         fs=PyFileSystem(ProxyHandler(_MockFileSystem())),
         pathfn=lambda p: p,
-        allow_copy_file=True,
         allow_move_dir=True,
         allow_append_to_file=True,
     )
@@ -249,7 +245,6 @@ def localfs_with_mmap(request, tempdir):
     return dict(
         fs=LocalFileSystem(use_mmap=True),
         pathfn=lambda p: (tempdir / p).as_posix(),
-        allow_copy_file=True,
         allow_move_dir=True,
         allow_append_to_file=True,
     )
@@ -260,7 +255,6 @@ def subtree_localfs(request, tempdir, localfs):
     return dict(
         fs=SubTreeFileSystem(str(tempdir), localfs['fs']),
         pathfn=lambda p: p,
-        allow_copy_file=True,
         allow_move_dir=True,
         allow_append_to_file=True,
     )
@@ -285,7 +279,6 @@ def s3fs(request, s3_connection, s3_server):
     yield dict(
         fs=fs,
         pathfn=bucket.__add__,
-        allow_copy_file=True,
         allow_move_dir=False,
         allow_append_to_file=False,
     )
@@ -298,7 +291,6 @@ def subtree_s3fs(request, s3fs):
     return dict(
         fs=SubTreeFileSystem(prefix, s3fs['fs']),
         pathfn=prefix.__add__,
-        allow_copy_file=True,
         allow_move_dir=False,
         allow_append_to_file=False,
     )
@@ -318,7 +310,6 @@ def hdfs(request, hdfs_connection):
     return dict(
         fs=fs,
         pathfn=lambda p: p,
-        allow_copy_file=False,
         allow_move_dir=True,
         allow_append_to_file=True,
     )
@@ -331,7 +322,6 @@ def py_fsspec_localfs(request, tempdir):
     return dict(
         fs=PyFileSystem(FSSpecHandler(fs)),
         pathfn=lambda p: (tempdir / p).as_posix(),
-        allow_copy_file=True,
         allow_move_dir=True,
         allow_append_to_file=True,
     )
@@ -347,7 +337,6 @@ def py_fsspec_memoryfs(request, tempdir):
     return dict(
         fs=PyFileSystem(FSSpecHandler(fs)),
         pathfn=lambda p: p,
-        allow_copy_file=True,
         allow_move_dir=True,
         allow_append_to_file=True,
     )
@@ -374,7 +363,6 @@ def py_fsspec_s3fs(request, s3_connection, s3_server):
     yield dict(
         fs=fs,
         pathfn=bucket.__add__,
-        allow_copy_file=True,
         allow_move_dir=False,
         allow_append_to_file=True,
     )
@@ -444,11 +432,6 @@ def pathfn(request, filesystem_config):
 @pytest.fixture
 def allow_move_dir(request, filesystem_config):
     return filesystem_config['allow_move_dir']
-
-
-@pytest.fixture
-def allow_copy_file(request, filesystem_config):
-    return filesystem_config['allow_copy_file']
 
 
 @pytest.fixture
@@ -804,20 +787,16 @@ def test_delete_root_dir_contents(mockfs, py_mockfs):
     _check_root_dir_contents(py_mockfs)
 
 
-def test_copy_file(fs, pathfn, allow_copy_file):
+def test_copy_file(fs, pathfn):
     s = pathfn('test-copy-source-file')
     t = pathfn('test-copy-target-file')
 
     with fs.open_output_stream(s):
         pass
 
-    if allow_copy_file:
-        fs.copy_file(s, t)
-        fs.delete_file(s)
-        fs.delete_file(t)
-    else:
-        with pytest.raises(pa.ArrowNotImplementedError):
-            fs.copy_file(s, t)
+    fs.copy_file(s, t)
+    fs.delete_file(s)
+    fs.delete_file(t)
 
 
 def test_move_directory(fs, pathfn, allow_move_dir):
@@ -876,6 +855,7 @@ def identity(v):
     return v
 
 
+@pytest.mark.gzip
 @pytest.mark.parametrize(
     ('compression', 'buffer_size', 'compressor'),
     [
@@ -913,6 +893,7 @@ def test_open_input_file(fs, pathfn):
     assert result == data[read_from:]
 
 
+@pytest.mark.gzip
 @pytest.mark.parametrize(
     ('compression', 'buffer_size', 'decompressor'),
     [
@@ -934,6 +915,7 @@ def test_open_output_stream(fs, pathfn, compression, buffer_size,
         assert f.read(len(data)) == data
 
 
+@pytest.mark.gzip
 @pytest.mark.parametrize(
     ('compression', 'buffer_size', 'compressor', 'decompressor'),
     [
@@ -965,6 +947,25 @@ def test_open_append_stream(fs, pathfn, compression, buffer_size, compressor,
         with pytest.raises(pa.ArrowNotImplementedError):
             fs.open_append_stream(p, compression=compression,
                                   buffer_size=buffer_size)
+
+
+def test_open_output_stream_metadata(fs, pathfn):
+    p = pathfn('open-output-stream-metadata')
+    metadata = {'Content-Type': 'x-pyarrow/test'}
+
+    data = b'some data'
+    with fs.open_output_stream(p, metadata=metadata) as f:
+        f.write(data)
+
+    with fs.open_input_stream(p) as f:
+        assert f.read() == data
+        got_metadata = f.metadata()
+
+    if fs.type_name == 's3' or 'mock' in fs.type_name:
+        for k, v in metadata.items():
+            assert got_metadata[k] == v.encode()
+    else:
+        assert got_metadata == {}
 
 
 def test_localfs_options():
@@ -1035,6 +1036,16 @@ def test_s3_options():
     assert isinstance(fs, S3FileSystem)
     assert pickle.loads(pickle.dumps(fs)) == fs
 
+    fs = S3FileSystem(anonymous=True)
+    assert isinstance(fs, S3FileSystem)
+    assert pickle.loads(pickle.dumps(fs)) == fs
+
+    fs = S3FileSystem(background_writes=True,
+                      default_metadata={"ACL": "authenticated-read",
+                                        "Content-Type": "text/plain"})
+    assert isinstance(fs, S3FileSystem)
+    assert pickle.loads(pickle.dumps(fs)) == fs
+
     with pytest.raises(ValueError):
         S3FileSystem(access_key='access')
     with pytest.raises(ValueError):
@@ -1047,6 +1058,14 @@ def test_s3_options():
         S3FileSystem(
             access_key='access', secret_key='secret', role_arn='arn'
         )
+    with pytest.raises(ValueError):
+        S3FileSystem(
+            access_key='access', secret_key='secret', anonymous=True
+        )
+    with pytest.raises(ValueError):
+        S3FileSystem(role_arn="arn", anonymous=True)
+    with pytest.raises(ValueError):
+        S3FileSystem(default_metadata=["foo", "bar"])
 
 
 @pytest.mark.s3
@@ -1493,6 +1512,13 @@ def test_s3_real_aws():
     fs = S3FileSystem(anonymous=True, region='us-east-2')
     entries = fs.get_file_info(FileSelector('ursa-labs-taxi-data'))
     assert len(entries) > 0
+    with fs.open_input_stream('ursa-labs-taxi-data/2019/06/data.parquet') as f:
+        md = f.metadata()
+        assert 'Content-Type' in md
+        assert md['Last-Modified'] == b'2020-01-17T16:26:28Z'
+        # For some reason, the header value is quoted
+        # (both with AWS and Minio)
+        assert md['ETag'] == b'"f1efd5d76cb82861e1542117bfa52b90-8"'
 
 
 @pytest.mark.s3

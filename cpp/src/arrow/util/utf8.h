@@ -492,6 +492,30 @@ static inline bool UTF8FindIfReverse(const uint8_t* first, const uint8_t* last,
   return true;
 }
 
+static inline bool UTF8AdvanceCodepoints(const uint8_t* first, const uint8_t* last,
+                                         const uint8_t** destination, int64_t n) {
+  return UTF8FindIf(
+      first, last,
+      [&](uint32_t codepoint) {
+        bool done = n == 0;
+        n--;
+        return done;
+      },
+      destination);
+}
+
+static inline bool UTF8AdvanceCodepointsReverse(const uint8_t* first, const uint8_t* last,
+                                                const uint8_t** destination, int64_t n) {
+  return UTF8FindIfReverse(
+      first, last,
+      [&](uint32_t codepoint) {
+        bool done = n == 0;
+        n--;
+        return done;
+      },
+      destination);
+}
+
 template <class UnaryFunction>
 static inline bool UTF8ForEach(const uint8_t* first, const uint8_t* last,
                                UnaryFunction&& f) {
@@ -530,6 +554,16 @@ static inline bool UTF8AllOf(const uint8_t* first, const uint8_t* last, bool* re
   }
   *result = true;
   return true;
+}
+
+/// Count the number of codepoints in the given string (assuming it is valid UTF8).
+static inline int64_t UTF8Length(const uint8_t* first, const uint8_t* last) {
+  int64_t length = 0;
+  while (first != last) {
+    length += ((*first & 0xc0) != 0x80);
+    ++first;
+  }
+  return length;
 }
 
 }  // namespace util

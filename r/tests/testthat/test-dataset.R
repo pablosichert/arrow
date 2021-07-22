@@ -21,17 +21,21 @@ context("Dataset")
 
 library(dplyr)
 
-make_temp_dir <- function() {
-  path <- tempfile()
-  dir.create(path)
-  normalizePath(path, winslash = "/")
-}
-
 dataset_dir <- make_temp_dir()
 hive_dir <- make_temp_dir()
 ipc_dir <- make_temp_dir()
 csv_dir <- make_temp_dir()
 tsv_dir <- make_temp_dir()
+
+skip_if_multithreading_disabled <- function() {
+  is_32bit <- .Machine$sizeof.pointer < 8
+  is_old_r <- getRversion() < "4.0.0"
+  is_windows <- tolower(Sys.info()[["sysname"]]) == "windows"
+  if (is_32bit && is_old_r && is_windows) {
+    skip("Multithreading does not work properly on this system")
+  }
+}
+
 
 first_date <- lubridate::ymd_hms("2015-04-29 03:12:39")
 df1 <- tibble(
@@ -90,7 +94,7 @@ test_that("Setup (putting data in the dir)", {
   expect_length(dir(tsv_dir, recursive = TRUE), 2)
 })
 
-if(arrow_with_parquet()) {
+if (arrow_with_parquet()) {
   files <- c(
     file.path(dataset_dir, 1, "file1.parquet", fsep = "/"),
     file.path(dataset_dir, 2, "file2.parquet", fsep = "/")
@@ -348,11 +352,15 @@ test_that("IPC/Feather format data", {
 })
 
 test_that("CSV dataset", {
+  skip_if_multithreading_disabled()
   ds <- open_dataset(csv_dir, partitioning = "part", format = "csv")
   expect_r6_class(ds$format, "CsvFileFormat")
   expect_r6_class(ds$filesystem, "LocalFileSystem")
   expect_identical(names(ds), c(names(df1), "part"))
-  expect_identical(dim(ds), c(20L, 7L))
+  if (getRversion() >= "4.0.0") {
+    # CountRows segfaults on RTools35/R 3.6, so don't test it there
+    expect_identical(dim(ds), c(20L, 7L))
+  }
   expect_equivalent(
     ds %>%
       select(string = chr, integer = int, part) %>%
@@ -372,6 +380,7 @@ test_that("CSV dataset", {
 })
 
 test_that("CSV scan options", {
+  skip_if_multithreading_disabled()
   options <- FragmentScanOptions$create("text")
   expect_equal(options$type, "csv")
   options <- FragmentScanOptions$create("csv",
@@ -411,6 +420,7 @@ test_that("CSV scan options", {
 })
 
 test_that("compressed CSV dataset", {
+  skip_if_multithreading_disabled()
   skip_if_not_available("gzip")
   dst_dir <- make_temp_dir()
   dst_file <- file.path(dst_dir, "data.csv.gz")
@@ -434,6 +444,7 @@ test_that("compressed CSV dataset", {
 })
 
 test_that("CSV dataset options", {
+  skip_if_multithreading_disabled()
   dst_dir <- make_temp_dir()
   dst_file <- file.path(dst_dir, "data.csv")
   df <- tibble(chr = letters[1:10])
@@ -461,6 +472,7 @@ test_that("CSV dataset options", {
 })
 
 test_that("Other text delimited dataset", {
+  skip_if_multithreading_disabled()
   ds1 <- open_dataset(tsv_dir, partitioning = "part", format = "tsv")
   expect_equivalent(
     ds1 %>%
@@ -489,6 +501,7 @@ test_that("Other text delimited dataset", {
 })
 
 test_that("readr parse options", {
+  skip_if_multithreading_disabled()
   arrow_opts <- names(formals(CsvParseOptions$create))
   readr_opts <- names(formals(readr_to_csv_parse_options))
 
@@ -1105,6 +1118,111 @@ test_that("Assembling a Dataset manually and getting a Table", {
   expect_scan_result(ds, schm)
 })
 
+test_that("URI-decoding with directory partitioning", {
+  root <- make_temp_dir()
+  fmt <- FileFormat$create("feather")
+  fs <- LocalFileSystem$create()
+  selector <- FileSelector$create(root, recursive = TRUE)
+  dir1 <- file.path(root, "2021-05-04 00%3A00%3A00", "%24")
+  dir.create(dir1, recursive = TRUE)
+  write_feather(df1, file.path(dir1, "data.feather"))
+
+  partitioning <- DirectoryPartitioning$create(
+    schema(date = timestamp(unit = "s"), string = utf8()))
+  factory <- FileSystemDatasetFactory$create(
+    fs, selector, NULL, fmt, partitioning = partitioning)
+  schm <- factory$Inspect()
+  ds <- factory$Finish(schm)
+  expect_scan_result(ds, schm)
+
+  partitioning <- DirectoryPartitioning$create(
+    schema(date = timestamp(unit = "s"), string = utf8()),
+    segment_encoding = "none")
+  factory <- FileSystemDatasetFactory$create(
+    fs, selector, NULL, fmt, partitioning = partitioning)
+  schm <- factory$Inspect()
+  expect_error(factory$Finish(schm), "Invalid: error parsing")
+
+  partitioning_factory <- DirectoryPartitioningFactory$create(
+    c("date", "string"))
+  factory <- FileSystemDatasetFactory$create(
+    fs, selector, NULL, fmt, partitioning_factory)
+  schm <- factory$Inspect()
+  ds <- factory$Finish(schm)
+  # Can't directly inspect partition expressions, so do it implicitly via scan
+  expect_equal(
+    ds %>%
+      filter(date == "2021-05-04 00:00:00", string == "$") %>%
+      select(int) %>%
+      collect(),
+    df1 %>% select(int) %>% collect()
+  )
+
+  partitioning_factory <- DirectoryPartitioningFactory$create(
+    c("date", "string"), segment_encoding = "none")
+  factory <- FileSystemDatasetFactory$create(
+    fs, selector, NULL, fmt, partitioning_factory)
+  schm <- factory$Inspect()
+  ds <- factory$Finish(schm)
+  expect_equal(
+    ds %>%
+      filter(date == "2021-05-04 00%3A00%3A00", string == "%24") %>%
+      select(int) %>%
+      collect(),
+    df1 %>% select(int) %>% collect()
+  )
+})
+
+test_that("URI-decoding with hive partitioning", {
+  root <- make_temp_dir()
+  fmt <- FileFormat$create("feather")
+  fs <- LocalFileSystem$create()
+  selector <- FileSelector$create(root, recursive = TRUE)
+  dir1 <- file.path(root, "date=2021-05-04 00%3A00%3A00", "string=%24")
+  dir.create(dir1, recursive = TRUE)
+  write_feather(df1, file.path(dir1, "data.feather"))
+
+  partitioning <- hive_partition(
+    date = timestamp(unit = "s"), string = utf8())
+  factory <- FileSystemDatasetFactory$create(
+    fs, selector, NULL, fmt, partitioning = partitioning)
+  ds <- factory$Finish(schm)
+  expect_scan_result(ds, schm)
+
+  partitioning <- hive_partition(
+    date = timestamp(unit = "s"), string = utf8(), segment_encoding = "none")
+  factory <- FileSystemDatasetFactory$create(
+    fs, selector, NULL, fmt, partitioning = partitioning)
+  expect_error(factory$Finish(schm), "Invalid: error parsing")
+
+  partitioning_factory <- hive_partition()
+  factory <- FileSystemDatasetFactory$create(
+    fs, selector, NULL, fmt, partitioning_factory)
+  schm <- factory$Inspect()
+  ds <- factory$Finish(schm)
+  # Can't directly inspect partition expressions, so do it implicitly via scan
+  expect_equal(
+    ds %>%
+      filter(date == "2021-05-04 00:00:00", string == "$") %>%
+      select(int) %>%
+      collect(),
+    df1 %>% select(int) %>% collect()
+  )
+
+  partitioning_factory <- hive_partition(segment_encoding = "none")
+  factory <- FileSystemDatasetFactory$create(
+    fs, selector, NULL, fmt, partitioning_factory)
+  schm <- factory$Inspect()
+  ds <- factory$Finish(schm)
+  expect_equal(
+    ds %>%
+      filter(date == "2021-05-04 00%3A00%3A00", string == "%24") %>%
+      select(int) %>%
+      collect(),
+    df1 %>% select(int) %>% collect()
+  )
+})
+
 test_that("Assembling multiple DatasetFactories with DatasetFactory", {
   skip_if_not_available("parquet")
   factory1 <- dataset_factory(file.path(dataset_dir, 1), format = "parquet")
@@ -1472,6 +1590,29 @@ test_that("Writing a dataset: Parquet format options", {
   )
 })
 
+test_that("Writing a dataset: CSV format options", {
+  skip_if_multithreading_disabled()
+  df <- tibble(
+    int = 1:10,
+    dbl = as.numeric(1:10),
+    lgl = rep(c(TRUE, FALSE, NA, TRUE, FALSE), 2),
+    chr = letters[1:10],
+  )
+
+  dst_dir <- make_temp_dir()
+  write_dataset(df, dst_dir, format = "csv")
+  expect_true(dir.exists(dst_dir))
+  new_ds <- open_dataset(dst_dir, format = "csv")
+  expect_equivalent(new_ds %>% collect(), df)
+
+  dst_dir <- make_temp_dir()
+  write_dataset(df, dst_dir, format = "csv", include_header = FALSE)
+  expect_true(dir.exists(dst_dir))
+  new_ds <- open_dataset(dst_dir, format = "csv",
+                         column_names = c("int", "dbl", "lgl", "chr"))
+  expect_equivalent(new_ds %>% collect(), df)
+})
+
 test_that("Dataset writing: unsupported features/input validation", {
   skip_if_not_available("parquet")
   expect_error(write_dataset(4), 'dataset must be a "Dataset"')
@@ -1497,5 +1638,21 @@ test_that("Collecting zero columns from a dataset doesn't return entire dataset"
   expect_equal(
     open_dataset(tmp) %>% select() %>% collect() %>% dim(),
     c(32, 0)
+  )
+})
+
+# see https://issues.apache.org/jira/browse/ARROW-12791
+test_that("Error if no format specified and files are not parquet", {
+  skip_if_not_available("parquet")
+  expect_error(
+    open_dataset(csv_dir, partitioning = "part"),
+    "Did you mean to specify a 'format' other than the default (parquet)?",
+    fixed = TRUE
+  )
+  expect_failure(
+    expect_error(
+      open_dataset(csv_dir, partitioning = "part", format = "parquet"),
+      "Did you mean to specify a 'format'"
+    )
   )
 })

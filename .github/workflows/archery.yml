@@ -31,6 +31,10 @@ on:
       - 'dev/tasks/**'
       - 'docker-compose.yml'
 
+concurrency:
+  group: ${{ github.repository }}-${{ github.ref }}-${{ github.workflow }}
+  cancel-in-progress: true
+
 jobs:
 
   test:
@@ -58,7 +62,7 @@ jobs:
         working-directory: dev/archery
         run: pytest -v archery
       - name: Archery Docker Validation
-        run: archery docker
+        run: archery docker check-config
       - name: Crossbow Check Config
         working-directory: dev/tasks
         run: archery crossbow check-config

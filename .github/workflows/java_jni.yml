@@ -35,6 +35,10 @@ on:
       - 'cpp/**'
       - 'java/**'
 
+concurrency:
+  group: ${{ github.repository }}-${{ github.ref }}-${{ github.workflow }}
+  cancel-in-progress: true
+
 env:
   DOCKER_VOLUME_PREFIX: ".docker/"
   ARCHERY_DOCKER_USER: ${{ secrets.DOCKERHUB_USER }}
@@ -46,15 +50,7 @@ jobs:
     name: AMD64 Debian 9 Java JNI (Gandiva, Plasma, ORC, Dataset)
     runs-on: ubuntu-latest
     if: ${{ !contains(github.event.pull_request.title, 'WIP') }}
-    timeout-minutes: 40
-    strategy:
-      fail-fast: false
-      matrix:
-        jdk: [8]
-        maven: [3.5.2]
-    env:
-      JDK: ${{ matrix.jdk }}
-      MAVEN: ${{ matrix.maven }}
+    timeout-minutes: 90
     steps:
       - name: Checkout Arrow
         uses: actions/checkout@v2

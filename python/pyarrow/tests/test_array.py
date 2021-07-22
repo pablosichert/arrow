@@ -1524,12 +1524,26 @@ def test_cast_string_to_number_roundtrip():
 
 
 def test_cast_dictionary():
-    arr = pa.DictionaryArray.from_arrays(
-        pa.array([0, 1, None], type=pa.int32()),
-        pa.array(["foo", "bar"]))
-    assert arr.cast(pa.string()).equals(pa.array(["foo", "bar", None]))
+    # cast to the value type
+    arr = pa.array(
+        ["foo", "bar", None],
+        type=pa.dictionary(pa.int64(), pa.string())
+    )
+    expected = pa.array(["foo", "bar", None])
+    assert arr.type == pa.dictionary(pa.int64(), pa.string())
+    assert arr.cast(pa.string()) == expected
+
+    # cast to a different key type
+    for key_type in [pa.int8(), pa.int16(), pa.int32()]:
+        typ = pa.dictionary(key_type, pa.string())
+        expected = pa.array(
+            ["foo", "bar", None],
+            type=pa.dictionary(key_type, pa.string())
+        )
+        assert arr.cast(typ) == expected
+
+    # shouldn't crash (ARROW-7077)
     with pytest.raises(pa.ArrowInvalid):
-        # Shouldn't crash (ARROW-7077)
         arr.cast(pa.int32())
 
 
@@ -2229,6 +2243,23 @@ def test_array_from_strided_bool():
     assert result.equals(expected)
 
 
+def test_array_from_strided():
+    pydata = [
+        ([b"ab", b"cd", b"ef"], (pa.binary(), pa.binary(2))),
+        ([1, 2, 3], (pa.int8(), pa.int16(), pa.int32(), pa.int64())),
+        ([1.0, 2.0, 3.0], (pa.float32(), pa.float64())),
+        (["ab", "cd", "ef"], (pa.utf8(), ))
+    ]
+
+    for values, dtypes in pydata:
+        nparray = np.array(values)
+        for patype in dtypes:
+            for mask in (None, np.array([False, False])):
+                arrow_array = pa.array(nparray[::2], patype,
+                                       mask=mask)
+                assert values[::2] == arrow_array.to_pylist()
+
+
 def test_boolean_true_count_false_count():
     # ARROW-9145
     arr = pa.array([True, True, None, False, None, True] * 1000)
@@ -2630,6 +2661,7 @@ def test_array_from_numpy_str_utf8():
         pa.array(vec, pa.string(), mask=np.array([False]))
 
 
+@pytest.mark.slow
 @pytest.mark.large_memory
 def test_numpy_binary_overflow_to_chunked():
     # ARROW-3762, ARROW-5966
@@ -2712,6 +2744,51 @@ def test_array_masked():
     arr = pa.array(np.array([4, None, 4, 3.], dtype="O"),
                    mask=np.array([False, True, False, True]))
     assert arr.type == pa.int64()
+
+
+def test_binary_array_masked():
+    # ARROW-12431
+    masked_basic = pa.array([b'\x05'], type=pa.binary(1),
+                            mask=np.array([False]))
+    assert [b'\x05'] == masked_basic.to_pylist()
+
+    # Fixed Length Binary
+    masked = pa.array(np.array([b'\x05']), type=pa.binary(1),
+                      mask=np.array([False]))
+    assert [b'\x05'] == masked.to_pylist()
+
+    masked_nulls = pa.array(np.array([b'\x05']), type=pa.binary(1),
+                            mask=np.array([True]))
+    assert [None] == masked_nulls.to_pylist()
+
+    # Variable Length Binary
+    masked = pa.array(np.array([b'\x05']), type=pa.binary(),
+                      mask=np.array([False]))
+    assert [b'\x05'] == masked.to_pylist()
+
+    masked_nulls = pa.array(np.array([b'\x05']), type=pa.binary(),
+                            mask=np.array([True]))
+    assert [None] == masked_nulls.to_pylist()
+
+    # Fixed Length Binary, copy
+    npa = np.array([b'aaa', b'bbb', b'ccc']*10)
+    arrow_array = pa.array(npa, type=pa.binary(3),
+                           mask=np.array([False, False, False]*10))
+    npa[npa == b"bbb"] = b"XXX"
+    assert ([b'aaa', b'bbb', b'ccc']*10) == arrow_array.to_pylist()
+
+
+def test_binary_array_strided():
+    # Masked
+    nparray = np.array([b"ab", b"cd", b"ef"])
+    arrow_array = pa.array(nparray[::2], pa.binary(2),
+                           mask=np.array([False, False]))
+    assert [b"ab", b"ef"] == arrow_array.to_pylist()
+
+    # Unmasked
+    nparray = np.array([b"ab", b"cd", b"ef"])
+    arrow_array = pa.array(nparray[::2], pa.binary(2))
+    assert [b"ab", b"ef"] == arrow_array.to_pylist()
 
 
 def test_array_invalid_mask_raises():

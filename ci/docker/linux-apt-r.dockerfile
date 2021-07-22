@@ -19,6 +19,9 @@ ARG base
 FROM ${base}
 ARG arch
 
+ARG tz="UTC"
+ENV TZ=${tz}
+
 # Build R
 # [1] https://www.digitalocean.com/community/tutorials/how-to-install-r-on-ubuntu-18-04
 # [2] https://linuxize.com/post/how-to-install-r-on-ubuntu-18-04/#installing-r-packages-from-cran
@@ -36,10 +39,11 @@ RUN apt-get update -y && \
     # -cran40 has 4.0 versions for bionic and focal
     # R 3.2, 3.3, 3.4 are available without the suffix but only for trusty and xenial
     # TODO: make sure OS version and R version are valid together and conditionally set repo suffix
-    # This is a hack to turn 3.6 into 35 and 4.0 into 40:
-    add-apt-repository 'deb https://cloud.r-project.org/bin/linux/ubuntu '$(lsb_release -cs)'-cran'$(echo "${r}" | tr -d . | tr 6 5)'/' && \
+    # This is a hack to turn 3.6 into 35, and 4.0/4.1 into 40:
+    add-apt-repository 'deb https://cloud.r-project.org/bin/linux/ubuntu '$(lsb_release -cs)'-cran'$(echo "${r}" | tr -d . | tr 6 5 | tr 1 0)'/' && \
     apt-get install -y \
         r-base=${r}* \
+        r-recommended=${r}* \
         # system libs needed by core R packages
         libxml2-dev \
         libgit2-dev \
@@ -59,6 +63,16 @@ RUN apt-get update -y && \
     locale-gen en_US.UTF-8 && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
+
+ARG gcc_version=""
+RUN if [ "${gcc_version}" != "" ]; then \
+      update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-${gcc_version} 100 && \
+      update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-${gcc_version} 100 && \
+      update-alternatives --install /usr/bin/cc cc /usr/bin/gcc 30 && \
+      update-alternatives --set cc /usr/bin/gcc && \
+      update-alternatives --install /usr/bin/c++ c++ /usr/bin/g++ 30 && \
+      update-alternatives --set c++ /usr/bin/g++; \
+    fi
 
 # Ensure parallel R package installation, set CRAN repo mirror,
 # and use pre-built binaries where possible

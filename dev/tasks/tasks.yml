@@ -157,27 +157,27 @@ tasks:
   #   Python and the OS are the main dimension. The R package `r-arrow` is
   #   an independent feedstock as it doesn't have the Python but the
   #   R dimension. To limit the number of CI jobs, we are building `r-arrow`
-  #   for R 3.6 with the Python 3.6 jobs and for R 4.0 with the Python 3.7 jobs.
+  #   for R 4.0 with the Python 3.6 jobs and for R 4.1 with the Python 3.7 jobs.
   # * The files in `dev/tasks/conda-recipes/.ci_support/` are automatically
   #   generated and to be synced regularly from the feedstock. We have no way
   #   yet to generate them inside the arrow repository automatically.
 
-  conda-linux-gcc-py36-cpu-r36:
+  conda-linux-gcc-py36-cpu-r40:
     ci: azure
     template: conda-recipes/azure.linux.yml
     params:
       config: linux_64_cuda_compiler_versionNonenumpy1.17python3.6.____cpython
-      r_config: linux_64_r_base3.6
+      r_config: linux_64_r_base4.0
     artifacts:
       - arrow-cpp-{no_rc_version}-py36(h[a-z0-9]+)_0_cpu.tar.bz2
       - pyarrow-{no_rc_version}-py36(h[a-z0-9]+)_0_cpu.tar.bz2
 
-  conda-linux-gcc-py37-cpu-r40:
+  conda-linux-gcc-py37-cpu-r41:
     ci: azure
     template: conda-recipes/azure.linux.yml
     params:
       config: linux_64_cuda_compiler_versionNonenumpy1.17python3.7.____cpython
-      r_config: linux_64_r_base4.0
+      r_config: linux_64_r_base4.1
     artifacts:
       - arrow-cpp-{no_rc_version}-py37(h[a-z0-9]+)_0_cpu.tar.bz2
       - pyarrow-{no_rc_version}-py37(h[a-z0-9]+)_0_cpu.tar.bz2
@@ -228,22 +228,22 @@ tasks:
 
   ############################## Conda OSX ####################################
 
-  conda-osx-clang-py36-r36:
+  conda-osx-clang-py36-r40:
     ci: azure
     template: conda-recipes/azure.osx.yml
     params:
       config: osx_64_numpy1.17python3.6.____cpython
-      r_config: osx_64_r_base3.6
+      r_config: osx_64_r_base4.0
     artifacts:
       - arrow-cpp-{no_rc_version}-py36(h[a-z0-9]+)_0_cpu.tar.bz2
       - pyarrow-{no_rc_version}-py36(h[a-z0-9]+)_0_cpu.tar.bz2
 
-  conda-osx-clang-py37-r40:
+  conda-osx-clang-py37-r41:
     ci: azure
     template: conda-recipes/azure.osx.yml
     params:
       config: osx_64_numpy1.17python3.7.____cpython
-      r_config: osx_64_r_base4.0
+      r_config: osx_64_r_base4.1
     artifacts:
       - arrow-cpp-{no_rc_version}-py37(h[a-z0-9]+)_0_cpu.tar.bz2
       - pyarrow-{no_rc_version}-py37(h[a-z0-9]+)_0_cpu.tar.bz2
@@ -286,22 +286,22 @@ tasks:
 
   ############################## Conda Windows ################################
 
-  conda-win-vs2017-py36-r36:
+  conda-win-vs2017-py36-r40:
     ci: azure
     template: conda-recipes/azure.win.yml
     params:
       config: win_64_cuda_compiler_versionNonenumpy1.17python3.6.____cpython
-      r_config: win_64_r_base3.6
+      r_config: win_64_r_base4.0
     artifacts:
       - arrow-cpp-{no_rc_version}-py36(h[a-z0-9]+)_0_cpu.tar.bz2
       - pyarrow-{no_rc_version}-py36(h[a-z0-9]+)_0_cpu.tar.bz2
 
-  conda-win-vs2017-py37-r40:
+  conda-win-vs2017-py37-r41:
     ci: azure
     template: conda-recipes/azure.win.yml
     params:
       config: win_64_cuda_compiler_versionNonenumpy1.17python3.7.____cpython
-      r_config: win_64_r_base4.0
+      r_config: win_64_r_base4.1
     artifacts:
       - arrow-cpp-{no_rc_version}-py37(h[a-z0-9]+)_0_cpu.tar.bz2
       - pyarrow-{no_rc_version}-py37(h[a-z0-9]+)_0_cpu.tar.bz2
@@ -355,10 +355,11 @@ tasks:
                                                    ("10.13", "high-sierra", "ON")] %}
   {% set platform_tag = "macosx_{}_x86_64".format(macos_version.replace('.', '_')) %}
 
-  wheel-osx-{{ macos_codename }}-{{ python_tag }}:
+  wheel-macos-{{ macos_codename }}-{{ python_tag }}-amd64:
     ci: github
-    template: python-wheels/github.osx.yml
+    template: python-wheels/github.osx.amd64.yml
     params:
+      vcpkg_version: "2021.04.30"
       python_version: {{ python_version }}
       macos_deployment_target: {{ macos_version }}
       arrow_s3: {{ arrow_s3 }}
@@ -369,7 +370,7 @@ tasks:
 
 {############################## Wheel Windows ################################}
 
-  wheel-windows-{{ python_tag }}:
+  wheel-windows-{{ python_tag }}-amd64:
     ci: github
     template: python-wheels/github.windows.yml
     params:
@@ -378,6 +379,30 @@ tasks:
       - pyarrow-{no_rc_version}-{{ python_tag }}-{{ abi_tag }}-win_amd64.whl
 
 {% endfor %}
+
+{############################## Wheel OSX M1 #################################}
+
+  wheel-macos-big-sur-cp39-arm64:
+    ci: github
+    template: python-wheels/github.osx.arm64.yml
+    params:
+      arch: arm64
+      vcpkg_version: "2021.04.30"
+      python_version: "3.9"
+      macos_deployment_target: "11.0"
+    artifacts:
+      - pyarrow-{no_rc_version}-cp39-cp39-macosx_11_0_arm64.whl
+
+  wheel-macos-big-sur-cp39-universal2:
+    ci: github
+    template: python-wheels/github.osx.arm64.yml
+    params:
+      arch: universal2
+      vcpkg_version: "2021.04.30"
+      python_version: "3.9"
+      macos_deployment_target: "11.0"
+    artifacts:
+      - pyarrow-{no_rc_version}-cp39-cp39-macosx_11_0_universal2.whl
 
 {############################ Python sdist ####################################}
 
@@ -635,10 +660,45 @@ tasks:
     ci: github
     template: java-jars/github.yml
     artifacts:
-      #TODO(kszucs): need to list the rest of the jars here
-      - arrow-gandiva-{no_rc_version}-SNAPSHOT.jar
-      - arrow-orc-{no_rc_version}-SNAPSHOT.jar
+      - arrow-algorithm-{no_rc_version}-SNAPSHOT-tests.jar
+      - arrow-algorithm-{no_rc_version}-SNAPSHOT.jar
+      - arrow-avro-{no_rc_version}-SNAPSHOT-tests.jar
+      - arrow-avro-{no_rc_version}-SNAPSHOT.jar
+      - arrow-compression-{no_rc_version}-SNAPSHOT-tests.jar
+      - arrow-compression-{no_rc_version}-SNAPSHOT.jar
+      - arrow-dataset-{no_rc_version}-SNAPSHOT-tests.jar
       - arrow-dataset-{no_rc_version}-SNAPSHOT.jar
+      - arrow-format-{no_rc_version}-SNAPSHOT-tests.jar
+      - arrow-format-{no_rc_version}-SNAPSHOT.jar
+      - arrow-gandiva-{no_rc_version}-SNAPSHOT-tests.jar
+      - arrow-gandiva-{no_rc_version}-SNAPSHOT.jar
+      - arrow-jdbc-{no_rc_version}-SNAPSHOT-tests.jar
+      - arrow-jdbc-{no_rc_version}-SNAPSHOT.jar
+      - arrow-memory-core-{no_rc_version}-SNAPSHOT-tests.jar
+      - arrow-memory-core-{no_rc_version}-SNAPSHOT.jar
+      - arrow-memory-netty-{no_rc_version}-SNAPSHOT-tests.jar
+      - arrow-memory-netty-{no_rc_version}-SNAPSHOT.jar
+      - arrow-memory-unsafe-{no_rc_version}-SNAPSHOT-tests.jar
+      - arrow-memory-unsafe-{no_rc_version}-SNAPSHOT.jar
+      - arrow-orc-{no_rc_version}-SNAPSHOT-tests.jar
+      - arrow-orc-{no_rc_version}-SNAPSHOT.jar
+      - arrow-performance-{no_rc_version}-SNAPSHOT-tests.jar
+      - arrow-performance-{no_rc_version}-SNAPSHOT.jar
+      - arrow-plasma-{no_rc_version}-SNAPSHOT-tests.jar
+      - arrow-plasma-{no_rc_version}-SNAPSHOT.jar
+      - arrow-tools-{no_rc_version}-SNAPSHOT-jar-with-dependencies.jar
+      - arrow-tools-{no_rc_version}-SNAPSHOT-tests.jar
+      - arrow-tools-{no_rc_version}-SNAPSHOT.jar
+      - arrow-vector-{no_rc_version}-SNAPSHOT-shade-format-flatbuffers.jar
+      - arrow-vector-{no_rc_version}-SNAPSHOT-tests.jar
+      - arrow-vector-{no_rc_version}-SNAPSHOT.jar
+      - benchmarks.jar
+      - flight-core-{no_rc_version}-SNAPSHOT-jar-with-dependencies.jar
+      - flight-core-{no_rc_version}-SNAPSHOT-shaded-ext.jar
+      - flight-core-{no_rc_version}-SNAPSHOT-shaded.jar
+      - flight-core-{no_rc_version}-SNAPSHOT-tests.jar
+      - flight-core-{no_rc_version}-SNAPSHOT.jar
+      - flight-grpc-{no_rc_version}-SNAPSHOT-tests.jar
 
   ############################## NuGet packages ###############################
 
@@ -789,7 +849,10 @@ tasks:
     template: docker-tests/github.linux.yml
     params:
       env:
+        # clang-tools and llvm version need to be synchronized so as
+        # to have the right llvm-symbolizer version
         CLANG_TOOLS: 11
+        LLVM: 11
         UBUNTU: 20.04
       image: ubuntu-cpp-thread-sanitizer
 
@@ -844,8 +907,13 @@ tasks:
     template: docker-tests/azure.linux.yml
     params:
       env:
+        ARROW_R_DEV: "TRUE"
         UBUNTU: 18.04
       run: ubuntu-r-valgrind
+
+  test-r-linux-rchk:
+    ci: github
+    template: r/github.linux.rchk.yml
 
   test-r-linux-as-cran:
     ci: github
@@ -856,6 +924,10 @@ tasks:
   test-r-version-compatibility:
     ci: github
     template: r/github.linux.version.compatibility.yml
+
+  test-r-rtools-35:
+    ci: github
+    template: r/github.windows.rtools35.yml
 
   test-r-versions:
     ci: github
@@ -885,6 +957,28 @@ tasks:
       r_image: {{ r_image }}
       r_tag: {{ r_tag }}
 {% endfor %}
+
+  test-r-ubuntu-21.04:
+    ci: github
+    template: docker-tests/github.linux.yml
+    params:
+      env:
+        UBUNTU: 21.04
+        CLANG_TOOLS: 9 # can remove this when >=9 is the default
+      flags: '-e ARROW_SOURCE_HOME="/arrow" -e FORCE_BUNDLED_BUILD=TRUE -e LIBARROW_BUILD=TRUE'
+      image: ubuntu-r
+
+  test-r-gcc-11:
+    ci: github
+    template: docker-tests/github.linux.yml
+    params:
+      env:
+        UBUNTU: 21.04
+        CLANG_TOOLS: 9 # can remove this when >=9 is the default
+        GCC_VERSION: 11
+      # S3 support is not buildable with gcc11 right now
+      flags: '-e ARROW_SOURCE_HOME="/arrow" -e FORCE_BUNDLED_BUILD=TRUE -e LIBARROW_BUILD=TRUE -e ARROW_S3=OFF'
+      image: ubuntu-r-only-r
 
   test-r-rstudio-r-base-3.6-centos7-devtoolset-8:
     ci: azure
@@ -929,6 +1023,10 @@ tasks:
         UBUNTU: 18.04
       run: ubuntu-r-sanitizer
 
+  revdep-r-check:
+    ci: github
+    template: r/github.linux.revdepcheck.yml
+
   test-debian-10-go-1.15:
     ci: azure
     template: docker-tests/azure.linux.yml
@@ -943,6 +1041,12 @@ tasks:
     params:
       env:
         UBUNTU: "20.10"
+      run: ubuntu-docs
+
+  test-ubuntu-default-docs:
+    ci: azure
+    template: docker-tests/azure.linux.yml
+    params:
       run: ubuntu-docs
 
   ############################## vcpkg tests ##################################

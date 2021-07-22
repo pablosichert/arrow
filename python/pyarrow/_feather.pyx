@@ -20,7 +20,6 @@
 
 # cython: profile=False
 # distutils: language = c++
-# cython: embedsignature = True
 # cython: language_level=3
 
 from cython.operator cimport dereference as deref
@@ -69,13 +68,9 @@ cdef class FeatherReader(_Weakrefable):
     cdef:
         shared_ptr[CFeatherReader] reader
 
-    def __cinit__(self):
-        pass
-
-    def open(self, source, c_bool use_memory_map=True):
+    def __cinit__(self, source, c_bool use_memory_map):
         cdef shared_ptr[CRandomAccessFile] reader
         get_reader(source, use_memory_map, &reader)
-
         with nogil:
             self.reader = GetResultValue(CFeatherReader.Open(reader))
 

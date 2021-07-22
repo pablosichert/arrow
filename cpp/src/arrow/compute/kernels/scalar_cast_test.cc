@@ -113,7 +113,7 @@ static void CheckCastZeroCopy(std::shared_ptr<Array> input,
                               std::shared_ptr<DataType> to_type,
                               CastOptions options = CastOptions::Safe()) {
   ASSERT_OK_AND_ASSIGN(auto converted, Cast(*input, to_type, options));
-  ASSERT_OK(converted->ValidateFull());
+  ValidateOutput(*converted);
 
   ASSERT_EQ(input->data()->buffers.size(), converted->data()->buffers.size());
   for (size_t i = 0; i < input->data()->buffers.size(); ++i) {
@@ -1583,7 +1583,7 @@ TEST(Cast, BinaryOrStringToBinary) {
 
       // invalid utf-8 is not an error for binary
       ASSERT_OK_AND_ASSIGN(auto strings, Cast(*invalid_utf8, to_type));
-      ASSERT_OK(strings->ValidateFull());
+      ValidateOutput(*strings);
       AssertBinaryZeroCopy(invalid_utf8, strings);
 
       // invalid utf-8 masked by a null bit is not an error
@@ -1687,12 +1687,12 @@ TEST(Cast, ListToList) {
     auto list_int64 = list_int32->Copy();
     list_int64->type = make_list(int64());
     list_int64->child_data[0] = Cast(list_int32->child_data[0], int64())->array();
-    ASSERT_OK(MakeArray(list_int64)->ValidateFull());
+    ValidateOutput(*list_int64);
 
     auto list_float32 = list_int32->Copy();
     list_float32->type = make_list(float32());
     list_float32->child_data[0] = Cast(list_int32->child_data[0], float32())->array();
-    ASSERT_OK(MakeArray(list_float32)->ValidateFull());
+    ValidateOutput(*list_float32);
 
     CheckCast(MakeArray(list_int32), MakeArray(list_float32));
     CheckCast(MakeArray(list_float32), MakeArray(list_int64));
@@ -1711,7 +1711,7 @@ TEST(Cast, ListToList) {
     auto list_int64 = list_int32->Copy();
     list_int64->type = make_list(int64());
     list_int64->child_data[0] = Cast(list_int32->child_data[0], int64())->array();
-    ASSERT_OK(MakeArray(list_int64)->ValidateFull());
+    ValidateOutput(*list_int64);
 
     CheckCast(MakeArray(list_int32), MakeArray(list_int64));
     CheckCast(MakeArray(list_int64), MakeArray(list_int32));
@@ -1861,7 +1861,7 @@ TEST(Cast, FromDictionary) {
     data->buffers[0] = nullptr;
     data->null_count = 0;
     std::shared_ptr<Array> dict_array = std::make_shared<DictionaryArray>(data);
-    ASSERT_OK(dict_array->ValidateFull());
+    ValidateOutput(*dict_array);
 
     CheckCast(dict_array, no_nulls);
   }
@@ -1909,6 +1909,40 @@ TEST(Cast, ExtensionTypeToIntDowncast) {
     CheckCast(SmallintArrayFromJSON("[0, null, -1, 1, 3]"),
               ArrayFromJSON(uint8(), "[0, null, 255, 1, 3]"), options);
   }
+}
+
+TEST(Cast, DictTypeToAnotherDict) {
+  auto check_cast = [&](const std::shared_ptr<DataType>& in_type,
+                        const std::shared_ptr<DataType>& out_type,
+                        const std::string& json_str,
+                        const CastOptions& options = CastOptions()) {
+    auto arr = ArrayFromJSON(in_type, json_str);
+    auto exp = in_type->Equals(out_type) ? arr : ArrayFromJSON(out_type, json_str);
+    // this checks for scalars as well
+    CheckCast(arr, exp, options);
+  };
+
+  //    check same type passed on to casting
+  check_cast(dictionary(int8(), int16()), dictionary(int8(), int16()),
+             "[1, 2, 3, 1, null, 3]");
+  check_cast(dictionary(int8(), int16()), dictionary(int32(), int64()),
+             "[1, 2, 3, 1, null, 3]");
+  check_cast(dictionary(int8(), int16()), dictionary(int32(), float64()),
+             "[1, 2, 3, 1, null, 3]");
+  check_cast(dictionary(int32(), utf8()), dictionary(int8(), utf8()),
+             R"(["a", "b", "a", null])");
+
+  auto arr = ArrayFromJSON(dictionary(int32(), int32()), "[1, 1000]");
+  // check casting unsafe values (checking for unsafe indices is unnecessary, because it
+  // would create an invalid index array which results in a ValidateOutput failure)
+  ASSERT_OK_AND_ASSIGN(auto casted,
+                       Cast(arr, dictionary(int8(), int8()), CastOptions::Unsafe()));
+  ValidateOutput(casted);
+
+  // check safe casting values
+  EXPECT_RAISES_WITH_MESSAGE_THAT(
+      Invalid, testing::HasSubstr("Integer value 1000 not in range"),
+      Cast(arr, dictionary(int8(), int8()), CastOptions::Safe()));
 }
 
 }  // namespace compute

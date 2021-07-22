@@ -32,9 +32,12 @@
 #include <gtest/gtest.h>
 
 #include "arrow/status.h"
+#include "arrow/testing/executor_util.h"
+#include "arrow/testing/future_util.h"
 #include "arrow/testing/gtest_util.h"
 #include "arrow/util/io_util.h"
 #include "arrow/util/macros.h"
+#include "arrow/util/test_common.h"
 #include "arrow/util/thread_pool.h"
 
 namespace arrow {
@@ -256,6 +259,42 @@ TEST_P(TestRunSynchronously, PropagatedError) {
 INSTANTIATE_TEST_SUITE_P(TestRunSynchronously, TestRunSynchronously,
                          ::testing::Values(false, true));
 
+class TransferTest : public testing::Test {
+ public:
+  internal::Executor* executor() { return mock_executor.get(); }
+  int spawn_count() { return mock_executor->spawn_count; }
+
+  std::function<void(const Status&)> callback = [](const Status&) {};
+  std::shared_ptr<MockExecutor> mock_executor = std::make_shared<MockExecutor>();
+};
+
+TEST_F(TransferTest, DefaultTransferIfNotFinished) {
+  {
+    Future<> fut = Future<>::Make();
+    auto transferred = executor()->Transfer(fut);
+    fut.MarkFinished();
+    ASSERT_FINISHES_OK(transferred);
+    ASSERT_EQ(1, spawn_count());
+  }
+  {
+    Future<> fut = Future<>::Make();
+    fut.MarkFinished();
+    auto transferred = executor()->Transfer(fut);
+    ASSERT_FINISHES_OK(transferred);
+    ASSERT_EQ(1, spawn_count());
+  }
+}
+
+TEST_F(TransferTest, TransferAlways) {
+  {
+    Future<> fut = Future<>::Make();
+    fut.MarkFinished();
+    auto transferred = executor()->TransferAlways(fut);
+    ASSERT_FINISHES_OK(transferred);
+    ASSERT_EQ(1, spawn_count());
+  }
+}
+
 class TestThreadPool : public ::testing::Test {
  public:
   void TearDown() override {
@@ -354,6 +393,23 @@ TEST_F(TestThreadPool, Spawn) {
 TEST_F(TestThreadPool, StressSpawn) {
   auto pool = this->MakeThreadPool(30);
   SpawnAdds(pool.get(), 1000, task_add<int>);
+}
+
+TEST_F(TestThreadPool, OwnsCurrentThread) {
+  auto pool = this->MakeThreadPool(30);
+  std::atomic<bool> one_failed{false};
+
+  for (int i = 0; i < 1000; ++i) {
+    ASSERT_OK(pool->Spawn([&] {
+      if (pool->OwnsThisThread()) return;
+
+      one_failed = true;
+    }));
+  }
+
+  ASSERT_OK(pool->Shutdown());
+  ASSERT_FALSE(pool->OwnsThisThread());
+  ASSERT_FALSE(one_failed);
 }
 
 TEST_F(TestThreadPool, StressSpawnThreaded) {

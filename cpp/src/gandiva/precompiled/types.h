@@ -76,6 +76,8 @@ gdv_int32 hash32_buf(const gdv_uint8* buf, int len, gdv_int32 seed);
 gdv_int64 hash64(double val, gdv_int64 seed);
 gdv_int64 hash64_buf(const gdv_uint8* buf, int len, gdv_int64 seed);
 
+gdv_int32 timestampdiffMonth_timestamp_timestamp(gdv_timestamp, gdv_timestamp);
+
 gdv_int64 timestampaddSecond_int32_timestamp(gdv_int32, gdv_timestamp);
 gdv_int64 timestampaddMinute_int32_timestamp(gdv_int32, gdv_timestamp);
 gdv_int64 timestampaddHour_int32_timestamp(gdv_int32, gdv_timestamp);
@@ -100,9 +102,21 @@ gdv_int64 add_int32_timestamp(gdv_int32, gdv_timestamp);
 gdv_int64 date_add_int64_timestamp(gdv_int64, gdv_timestamp);
 gdv_timestamp add_date64_int64(gdv_date64, gdv_int64);
 
+gdv_timestamp to_timestamp_int32(gdv_int32);
+gdv_timestamp to_timestamp_int64(gdv_int64);
+gdv_timestamp to_timestamp_float32(gdv_float32);
+gdv_timestamp to_timestamp_float64(gdv_float64);
+
+gdv_time32 to_time_int32(gdv_int32);
+gdv_time32 to_time_int64(gdv_int64);
+gdv_time32 to_time_float32(gdv_float32);
+gdv_time32 to_time_float64(gdv_float64);
+
 gdv_int64 date_sub_timestamp_int32(gdv_timestamp, gdv_int32);
 gdv_int64 subtract_timestamp_int32(gdv_timestamp, gdv_int32);
 gdv_int64 date_diff_timestamp_int64(gdv_timestamp, gdv_int64);
+
+gdv_boolean castBIT_utf8(void* context, const char* data, gdv_int32 data_len);
 
 bool is_distinct_from_timestamp_timestamp(gdv_int64, bool, gdv_int64, bool);
 bool is_not_distinct_from_int32_int32(gdv_int32, bool, gdv_int32, bool);
@@ -143,6 +157,9 @@ gdv_int64 round_int64_int32(gdv_int64 number, gdv_int32 precision);
 gdv_int32 round_int32(gdv_int32);
 gdv_int64 round_int64(gdv_int64);
 gdv_int64 get_power_of_10(gdv_int32);
+
+const char* bin_int32(void* context, gdv_int32 value, int32_t* out_len);
+const char* bin_int64(void* context, gdv_int64 value, int32_t* out_len);
 
 gdv_float64 cbrt_int32(gdv_int32);
 gdv_float64 cbrt_int64(gdv_int64);
@@ -278,6 +295,8 @@ const char* concat_utf8_utf8_utf8_utf8(void* context, const char* in1, gdv_int32
                                        bool in3_validity, const char* in4,
                                        gdv_int32 in4_len, bool in4_validity,
                                        gdv_int32* out_len);
+const char* space_int32(void* ctx, gdv_int32 n, int32_t* out_len);
+const char* space_int64(void* ctx, gdv_int64 n, int32_t* out_len);
 const char* concat_utf8_utf8_utf8_utf8_utf8(
     void* context, const char* in1, gdv_int32 in1_len, bool in1_validity, const char* in2,
     gdv_int32 in2_len, bool in2_validity, const char* in3, gdv_int32 in3_len,
@@ -374,6 +393,13 @@ const char* castVARCHAR_binary_int64(void* context, const char* data, gdv_int32 
 const char* castVARCHAR_utf8_int64(void* context, const char* data, gdv_int32 data_len,
                                    int64_t out_len, int32_t* out_length);
 
+const char* castVARBINARY_utf8_int64(void* context, const char* data, gdv_int32 data_len,
+                                     int64_t out_len, int32_t* out_length);
+
+const char* castVARBINARY_binary_int64(void* context, const char* data,
+                                       gdv_int32 data_len, int64_t out_len,
+                                       int32_t* out_length);
+
 const char* reverse_utf8(void* context, const char* data, gdv_int32 data_len,
                          int32_t* out_len);
 
@@ -398,12 +424,28 @@ const char* btrim_utf8_utf8(void* context, const char* basetext, gdv_int32 baset
                             const char* trimtext, gdv_int32 trimtext_len,
                             int32_t* out_len);
 
+gdv_int32 ascii_utf8(const char* data, gdv_int32 data_len);
+
 gdv_int32 locate_utf8_utf8(void* context, const char* sub_str, gdv_int32 sub_str_len,
                            const char* str, gdv_int32 str_len);
 
 gdv_int32 locate_utf8_utf8_int32(void* context, const char* sub_str,
                                  gdv_int32 sub_str_len, const char* str,
                                  gdv_int32 str_len, gdv_int32 start_pos);
+
+const char* lpad_utf8_int32_utf8(void* context, const char* text, gdv_int32 text_len,
+                                 gdv_int32 return_length, const char* fill_text,
+                                 gdv_int32 fill_text_len, gdv_int32* out_len);
+
+const char* rpad_utf8_int32_utf8(void* context, const char* text, gdv_int32 text_len,
+                                 gdv_int32 return_length, const char* fill_text,
+                                 gdv_int32 fill_text_len, gdv_int32* out_len);
+
+const char* lpad_utf8_int32(void* context, const char* text, gdv_int32 text_len,
+                            gdv_int32 return_length, gdv_int32* out_len);
+
+const char* rpad_utf8_int32(void* context, const char* text, gdv_int32 text_len,
+                            gdv_int32 return_length, gdv_int32* out_len);
 
 const char* replace_with_max_len_utf8_utf8_utf8(void* context, const char* text,
                                                 gdv_int32 text_len, const char* from_str,
@@ -459,6 +501,10 @@ const char* split_part(void* context, const char* text, gdv_int32 text_len,
                        const char* splitter, gdv_int32 split_len, gdv_int32 index,
                        gdv_int32* out_len);
 
+const char* byte_substr_binary_int32_int32(void* context, const char* text,
+                                           gdv_int32 text_len, gdv_int32 offset,
+                                           gdv_int32 length, gdv_int32* out_len);
+
 const char* castVARCHAR_bool_int64(void* context, gdv_boolean value, gdv_int64 out_len,
                                    gdv_int32* out_length);
 
@@ -473,6 +519,12 @@ const char* castVARCHAR_float32_int64(void* context, float value, int64_t len,
 
 const char* castVARCHAR_float64_int64(void* context, double value, int64_t len,
                                       int32_t* out_len);
+
+const char* left_utf8_int32(void* context, const char* text, gdv_int32 text_len,
+                            gdv_int32 number, gdv_int32* out_len);
+
+const char* right_utf8_int32(void* context, const char* text, gdv_int32 text_len,
+                             gdv_int32 number, gdv_int32* out_len);
 
 const char* binary_string(void* context, const char* text, gdv_int32 text_len,
                           gdv_int32* out_len);

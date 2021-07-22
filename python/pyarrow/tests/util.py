@@ -25,9 +25,12 @@ import gc
 import numpy as np
 import os
 import random
+import signal
 import string
 import subprocess
 import sys
+
+import pytest
 
 import pyarrow as pa
 
@@ -222,6 +225,15 @@ def change_cwd(path):
         os.chdir(curdir)
 
 
+@contextlib.contextmanager
+def disabled_gc():
+    gc.disable()
+    try:
+        yield
+    finally:
+        gc.enable()
+
+
 def _filesystem_uri(path):
     # URIs on Windows must follow 'file:///C:...' or 'file:/C:...' patterns.
     if os.name == 'nt':
@@ -237,3 +249,17 @@ class FSProtocolClass:
 
     def __fspath__(self):
         return str(self._path)
+
+
+def get_raise_signal():
+    if sys.version_info >= (3, 8):
+        return signal.raise_signal
+    elif os.name == 'nt':
+        # On Windows, os.kill() doesn't actually send a signal,
+        # it just terminates the process with the given exit code.
+        pytest.skip("test requires Python 3.8+ on Windows")
+    else:
+        # On Unix, emulate raise_signal() with os.kill().
+        def raise_signal(signum):
+            os.kill(os.getpid(), signum)
+        return raise_signal

@@ -70,9 +70,9 @@ const char* r6_class_name<ds::FileFormat>::get(
 // [[dataset::export]]
 std::shared_ptr<ds::ScannerBuilder> dataset___Dataset__NewScan(
     const std::shared_ptr<ds::Dataset>& ds) {
-  auto options = std::make_shared<ds::ScanOptions>();
-  options->pool = gc_memory_pool();
-  return ValueOrStop(ds->NewScan(std::move(options)));
+  auto builder = ValueOrStop(ds->NewScan());
+  StopIfNotOk(builder->Pool(gc_memory_pool()));
+  return builder;
 }
 
 // [[dataset::export]]
@@ -280,6 +280,13 @@ void dataset___IpcFileWriteOptions__update1(
 }
 
 // [[dataset::export]]
+void dataset___CsvFileWriteOptions__update(
+    const std::shared_ptr<ds::CsvFileWriteOptions>& csv_options,
+    const std::shared_ptr<arrow::csv::WriteOptions>& write_options) {
+  *csv_options->write_options = *write_options;
+}
+
+// [[dataset::export]]
 std::shared_ptr<ds::IpcFileFormat> dataset___IpcFileFormat__Make() {
   return std::make_shared<ds::IpcFileFormat>();
 }
@@ -333,30 +340,50 @@ dataset___ParquetFragmentScanOptions__Make(bool use_buffered_stream, int64_t buf
 
 // DirectoryPartitioning, HivePartitioning
 
+ds::SegmentEncoding GetSegmentEncoding(const std::string& segment_encoding) {
+  if (segment_encoding == "none") {
+    return ds::SegmentEncoding::None;
+  } else if (segment_encoding == "uri") {
+    return ds::SegmentEncoding::Uri;
+  }
+  cpp11::stop("invalid segment encoding: " + segment_encoding);
+  return ds::SegmentEncoding::None;
+}
+
 // [[dataset::export]]
 std::shared_ptr<ds::DirectoryPartitioning> dataset___DirectoryPartitioning(
-    const std::shared_ptr<arrow::Schema>& schm) {
-  return std::make_shared<ds::DirectoryPartitioning>(schm);
+    const std::shared_ptr<arrow::Schema>& schm, const std::string& segment_encoding) {
+  ds::KeyValuePartitioningOptions options;
+  options.segment_encoding = GetSegmentEncoding(segment_encoding);
+  std::vector<std::shared_ptr<arrow::Array>> dictionaries;
+  return std::make_shared<ds::DirectoryPartitioning>(schm, dictionaries, options);
 }
 
 // [[dataset::export]]
 std::shared_ptr<ds::PartitioningFactory> dataset___DirectoryPartitioning__MakeFactory(
-    const std::vector<std::string>& field_names) {
-  return ds::DirectoryPartitioning::MakeFactory(field_names);
+    const std::vector<std::string>& field_names, const std::string& segment_encoding) {
+  ds::PartitioningFactoryOptions options;
+  options.segment_encoding = GetSegmentEncoding(segment_encoding);
+  return ds::DirectoryPartitioning::MakeFactory(field_names, options);
 }
 
 // [[dataset::export]]
 std::shared_ptr<ds::HivePartitioning> dataset___HivePartitioning(
-    const std::shared_ptr<arrow::Schema>& schm, const std::string& null_fallback) {
+    const std::shared_ptr<arrow::Schema>& schm, const std::string& null_fallback,
+    const std::string& segment_encoding) {
+  ds::HivePartitioningOptions options;
+  options.null_fallback = null_fallback;
+  options.segment_encoding = GetSegmentEncoding(segment_encoding);
   std::vector<std::shared_ptr<arrow::Array>> dictionaries;
-  return std::make_shared<ds::HivePartitioning>(schm, dictionaries, null_fallback);
+  return std::make_shared<ds::HivePartitioning>(schm, dictionaries, options);
 }
 
 // [[dataset::export]]
 std::shared_ptr<ds::PartitioningFactory> dataset___HivePartitioning__MakeFactory(
-    const std::string& null_fallback) {
+    const std::string& null_fallback, const std::string& segment_encoding) {
   ds::HivePartitioningFactoryOptions options;
   options.null_fallback = null_fallback;
+  options.segment_encoding = GetSegmentEncoding(segment_encoding);
   return ds::HivePartitioning::MakeFactory(options);
 }
 

@@ -86,6 +86,7 @@ class ARROW_DS_EXPORT ParquetFileFormat : public FileFormat {
     ///
     /// @{
     std::unordered_set<std::string> dict_columns;
+    arrow::TimeUnit::type coerce_int96_timestamp_unit = arrow::TimeUnit::NANO;
     /// @}
   } reader_options;
 
@@ -99,9 +100,13 @@ class ARROW_DS_EXPORT ParquetFileFormat : public FileFormat {
       const std::shared_ptr<ScanOptions>& options,
       const std::shared_ptr<FileFragment>& file) const override;
 
+  Result<RecordBatchGenerator> ScanBatchesAsync(
+      const std::shared_ptr<ScanOptions>& options,
+      const std::shared_ptr<FileFragment>& file) const override;
+
   Future<util::optional<int64_t>> CountRows(
       const std::shared_ptr<FileFragment>& file, compute::Expression predicate,
-      std::shared_ptr<ScanOptions> options) override;
+      const std::shared_ptr<ScanOptions>& options) override;
 
   using FileFormat::MakeFragment;
 
@@ -119,9 +124,13 @@ class ARROW_DS_EXPORT ParquetFileFormat : public FileFormat {
   Result<std::unique_ptr<parquet::arrow::FileReader>> GetReader(
       const FileSource& source, ScanOptions* = NULLPTR) const;
 
+  Future<std::shared_ptr<parquet::arrow::FileReader>> GetReaderAsync(
+      const FileSource& source, const std::shared_ptr<ScanOptions>& options) const;
+
   Result<std::shared_ptr<FileWriter>> MakeWriter(
       std::shared_ptr<io::OutputStream> destination, std::shared_ptr<Schema> schema,
-      std::shared_ptr<FileWriteOptions> options) const override;
+      std::shared_ptr<FileWriteOptions> options,
+      fs::FileLocator destination_locator) const override;
 
   std::shared_ptr<FileWriteOptions> DefaultWriteOptions() override;
 };
@@ -215,7 +224,8 @@ class ARROW_DS_EXPORT ParquetFragmentScanOptions : public FragmentScanOptions {
   /// EXPERIMENTAL: Parallelize conversion across columns. This option is ignored if a
   /// scan is already parallelized across input files to avoid thread contention. This
   /// option will be removed after support is added for simultaneous parallelization
-  /// across files and columns.
+  /// across files and columns. Only affects the threaded reader; the async reader
+  /// will parallelize across columns if use_threads is enabled.
   bool enable_parallel_column_conversion = false;
 };
 
@@ -244,7 +254,8 @@ class ARROW_DS_EXPORT ParquetFileWriter : public FileWriter {
  private:
   ParquetFileWriter(std::shared_ptr<io::OutputStream> destination,
                     std::shared_ptr<parquet::arrow::FileWriter> writer,
-                    std::shared_ptr<ParquetFileWriteOptions> options);
+                    std::shared_ptr<ParquetFileWriteOptions> options,
+                    fs::FileLocator destination_locator);
 
   Status FinishInternal() override;
 
@@ -342,7 +353,7 @@ class ARROW_DS_EXPORT ParquetDatasetFactory : public DatasetFactory {
       std::shared_ptr<parquet::arrow::SchemaManifest> manifest,
       std::shared_ptr<Schema> physical_schema, std::string base_path,
       ParquetFactoryOptions options,
-      std::unordered_map<std::string, std::vector<int>> path_to_row_group_ids)
+      std::vector<std::pair<std::string, std::vector<int>>> paths_with_row_group_ids)
       : filesystem_(std::move(filesystem)),
         format_(std::move(format)),
         metadata_(std::move(metadata)),
@@ -350,7 +361,7 @@ class ARROW_DS_EXPORT ParquetDatasetFactory : public DatasetFactory {
         physical_schema_(std::move(physical_schema)),
         base_path_(std::move(base_path)),
         options_(std::move(options)),
-        path_to_row_group_ids_(std::move(path_to_row_group_ids)) {}
+        paths_with_row_group_ids_(std::move(paths_with_row_group_ids)) {}
 
   std::shared_ptr<fs::FileSystem> filesystem_;
   std::shared_ptr<ParquetFileFormat> format_;
@@ -359,7 +370,7 @@ class ARROW_DS_EXPORT ParquetDatasetFactory : public DatasetFactory {
   std::shared_ptr<Schema> physical_schema_;
   std::string base_path_;
   ParquetFactoryOptions options_;
-  std::unordered_map<std::string, std::vector<int>> path_to_row_group_ids_;
+  std::vector<std::pair<std::string, std::vector<int>>> paths_with_row_group_ids_;
 
  private:
   Result<std::vector<std::shared_ptr<FileFragment>>> CollectParquetFragments(

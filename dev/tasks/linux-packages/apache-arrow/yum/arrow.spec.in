@@ -35,6 +35,11 @@
     echo 3; \
   fi)
 
+%define lz4_requirement %( \
+  if [ %{_amzn} -eq 0 ]; then \
+    echo ">= 1.8.0"; \
+  fi)
+
 %define use_boost (!%{is_amazon_linux})
 %define use_flight (%{rhel} >= 8)
 %define use_gandiva (%{rhel} >= 8 && %{_arch} != "aarch64")
@@ -43,12 +48,15 @@
 %define use_python (!%{is_amazon_linux})
 # TODO: Enable this. This works on local but is fragile on GitHub Actions and
 # Travis CI.
-# %define use_s3 (%{_centos_ver} >= 8)
+# %define use_s3 (%{rhel} >= 8)
 %define use_s3 0
 
 %define have_rapidjson (%{rhel} == 7)
 %define have_re2 (%{rhel} >= 8)
-%define have_utf8proc (%{rhel} == 7)
+# EPEL ships utf8proc but it's old.
+# %define have_utf8proc (%{rhel} == 7)
+%define have_utf8proc 0
+%define have_zstd (!%{is_amazon_linux})
 
 Name:		@PACKAGE@
 Version:	@VERSION@
@@ -79,8 +87,10 @@ BuildRequires:	gflags-devel
 %endif
 BuildRequires:	git
 BuildRequires:	glog-devel
+%if %{have_zstd}
 BuildRequires:	libzstd-devel
-BuildRequires:	lz4-devel
+%endif
+BuildRequires:	lz4-devel %{lz4_requirement}
 BuildRequires:	ninja-build
 BuildRequires:	openssl-devel
 BuildRequires:	pkgconfig
@@ -195,8 +205,10 @@ Requires:	brotli
 Requires:	gflags
 %endif
 Requires:	glog
+%if %{have_zstd}
 Requires:	libzstd
-Requires:	lz4
+%endif
+Requires:	lz4 %{lz4_requirement}
 %if %{have_re2}
 Requires:	re2
 %endif
@@ -224,8 +236,10 @@ Requires:	bzip2-devel
 %if %{use_flight}
 Requires:	c-ares-devel
 %endif
+%if %{have_zstd}
 Requires:	libzstd-devel
-Requires:	lz4-devel
+%endif
+Requires:	lz4-devel %{lz4_requirement}
 Requires:	openssl-devel
 %if %{have_rapidjson}
 Requires:	rapidjson-devel
@@ -267,7 +281,9 @@ Libraries and header files for Apache Arrow C++.
 %if %{have_utf8proc}
 %{_libdir}/cmake/arrow/Findutf8proc.cmake
 %endif
+%if %{have_zstd}
 %{_libdir}/cmake/arrow/Findzstd.cmake
+%endif
 %{_libdir}/cmake/arrow/arrow-config.cmake
 %{_libdir}/libarrow.a
 %{_libdir}/libarrow.so

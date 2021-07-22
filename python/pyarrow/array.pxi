@@ -836,11 +836,12 @@ cdef class Array(_PandasConvertible):
             result = GetResultValue(self.ap.View(type.sp_type))
         return pyarrow_wrap_array(result)
 
-    def sum(self):
+    def sum(self, **kwargs):
         """
         Sum the values in a numerical array.
         """
-        return _pc().call_function('sum', [self])
+        options = _pc().ScalarAggregateOptions(**kwargs)
+        return _pc().call_function('sum', [self], options)
 
     def unique(self):
         """
@@ -1621,7 +1622,6 @@ cdef class ListArray(BaseListArray):
             3
           ]
         ]
-
         # nulls in the offsets array become null lists
         >>> offsets = pa.array([0, None, 2, 4])
         >>> pa.ListArray.from_arrays(offsets, values)

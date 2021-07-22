@@ -203,7 +203,7 @@ FileSystem <- R6Class("FileSystem", inherit = ArrowObject,
     GetFileInfo = function(x) {
       if (inherits(x, "FileSelector")) {
         fs___FileSystem__GetTargetInfos_FileSelector(self, x)
-      } else if (is.character(x)){
+      } else if (is.character(x)) {
         fs___FileSystem__GetTargetInfos_Paths(self, clean_path_rel(x))
       } else {
         abort("incompatible type for FileSystem$GetFileInfo()")
@@ -398,10 +398,8 @@ default_s3_options <- list(
 #' @return A `SubTreeFileSystem` containing an `S3FileSystem` and the bucket's
 #' relative path. Note that this function's success does not guarantee that you
 #' are authorized to access the bucket's contents.
-#' @examples
-#' if (arrow_with_s3()) {
-#'   bucket <- s3_bucket("ursa-labs-taxi-data")
-#' }
+#' @examplesIf arrow_with_s3()
+#' bucket <- s3_bucket("ursa-labs-taxi-data")
 #' @export
 s3_bucket <- function(bucket, ...) {
   assert_that(is.string(bucket))

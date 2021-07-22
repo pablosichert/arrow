@@ -167,17 +167,20 @@ Table$create <- function(..., schema = NULL) {
   }
   stopifnot(length(dots) > 0)
   
+  if (all_record_batches(dots)) {
+    return(Table__from_record_batches(dots, schema))
+  }
+
+  # If any arrays are length 1, recycle them  
+  dots <- recycle_scalars(dots)
+
+  out <- Table__from_dots(dots, schema, option_use_threads())
+  
   # Preserve any grouping
   if (length(dots) == 1 && inherits(dots[[1]], "grouped_df")) {
-    out <- Table__from_dots(dots, schema)
-    return(dplyr::group_by(out, !!!dplyr::groups(dots[[1]])))
+    out <- dplyr::group_by(out, !!!dplyr::groups(dots[[1]]))
   }
-  
-  if (all_record_batches(dots)) {
-    Table__from_record_batches(dots, schema)
-  } else {
-    Table__from_dots(dots, schema)
-  }
+  out
 }
 
 #' @export

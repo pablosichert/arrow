@@ -51,7 +51,7 @@ TEST(GetTakeIndices, Basics) {
     ASSERT_OK_AND_ASSIGN(auto indices,
                          internal::GetTakeIndices(*filter->data(), null_selection));
     auto indices_array = MakeArray(indices);
-    ASSERT_OK(indices_array->ValidateFull());
+    ValidateOutput(indices);
     AssertArraysEqual(*expected_indices, *indices_array, /*verbose=*/true);
   };
 
@@ -73,13 +73,13 @@ TEST(GetTakeIndices, NullValidityBuffer) {
   ASSERT_OK_AND_ASSIGN(auto indices,
                        internal::GetTakeIndices(*filter.data(), FilterOptions::DROP));
   auto indices_array = MakeArray(indices);
-  ASSERT_OK(indices_array->ValidateFull());
+  ValidateOutput(indices);
   AssertArraysEqual(*expected_indices, *indices_array, /*verbose=*/true);
 
   ASSERT_OK_AND_ASSIGN(
       indices, internal::GetTakeIndices(*filter.data(), FilterOptions::EMIT_NULL));
   indices_array = MakeArray(indices);
-  ASSERT_OK(indices_array->ValidateFull());
+  ValidateOutput(indices);
   AssertArraysEqual(*expected_indices, *indices_array, /*verbose=*/true);
 }
 
@@ -93,7 +93,7 @@ void CheckGetTakeIndicesCase(const Array& untyped_filter) {
   // Verify DROP indices
   {
     IndexArrayType indices(drop_indices);
-    ASSERT_OK(indices.ValidateFull());
+    ValidateOutput(indices);
 
     int64_t out_position = 0;
     for (int64_t i = 0; i < filter.length(); ++i) {
@@ -116,7 +116,7 @@ void CheckGetTakeIndicesCase(const Array& untyped_filter) {
   // Verify EMIT_NULL indices
   {
     IndexArrayType indices(emit_indices);
-    ASSERT_OK(indices.ValidateFull());
+    ValidateOutput(indices);
 
     int64_t out_position = 0;
     for (int64_t i = 0; i < filter.length(); ++i) {
@@ -183,7 +183,7 @@ class TestFilterKernel : public ::testing::Test {
     // test with EMIT_NULL
     ASSERT_OK_AND_ASSIGN(Datum out_datum, Filter(values, filter, emit_null_));
     auto actual = out_datum.make_array();
-    ASSERT_OK(actual->ValidateFull());
+    ValidateOutput(*actual);
     AssertArraysEqual(*expected, *actual);
 
     // test with DROP using EMIT_NULL and a coalesced filter
@@ -192,7 +192,7 @@ class TestFilterKernel : public ::testing::Test {
     expected = out_datum.make_array();
     ASSERT_OK_AND_ASSIGN(out_datum, Filter(values, filter, drop_));
     actual = out_datum.make_array();
-    ASSERT_OK(actual->ValidateFull());
+    ValidateOutput(*actual);
     AssertArraysEqual(*expected, *actual);
   }
 
@@ -212,11 +212,11 @@ void ValidateFilter(const std::shared_ptr<Array>& values,
 
   ASSERT_OK_AND_ASSIGN(Datum out_datum, Filter(values, filter_boxed, emit_null));
   auto filtered_emit_null = out_datum.make_array();
-  ASSERT_OK(filtered_emit_null->ValidateFull());
+  ValidateOutput(*filtered_emit_null);
 
   ASSERT_OK_AND_ASSIGN(out_datum, Filter(values, filter_boxed, drop));
   auto filtered_drop = out_datum.make_array();
-  ASSERT_OK(filtered_drop->ValidateFull());
+  ValidateOutput(*filtered_drop);
 
   // Create the expected arrays using Take
   ASSERT_OK_AND_ASSIGN(
@@ -380,11 +380,12 @@ TYPED_TEST(TestFilterKernelWithNumeric, CompareScalarAndFilterRandomNumeric) {
     CType c_fifty = 50;
     auto fifty = std::make_shared<ScalarType>(c_fifty);
     for (auto op : {EQUAL, NOT_EQUAL, GREATER, LESS_EQUAL}) {
-      ASSERT_OK_AND_ASSIGN(Datum selection,
-                           Compare(array, Datum(fifty), CompareOptions(op)));
+      ASSERT_OK_AND_ASSIGN(
+          Datum selection,
+          CallFunction(CompareOperatorToFunctionName(op), {array, Datum(fifty)}));
       ASSERT_OK_AND_ASSIGN(Datum filtered, Filter(array, selection));
       auto filtered_array = filtered.make_array();
-      ASSERT_OK(filtered_array->ValidateFull());
+      ValidateOutput(*filtered_array);
       auto expected =
           CompareAndFilter<TypeParam>(array->raw_values(), array->length(), c_fifty, op);
       ASSERT_ARRAYS_EQUAL(*filtered_array, *expected);
@@ -403,10 +404,11 @@ TYPED_TEST(TestFilterKernelWithNumeric, CompareArrayAndFilterRandomNumeric) {
     auto rhs = checked_pointer_cast<ArrayType>(
         rand.Numeric<TypeParam>(length, 0, 100, /*null_probability=*/0.0));
     for (auto op : {EQUAL, NOT_EQUAL, GREATER, LESS_EQUAL}) {
-      ASSERT_OK_AND_ASSIGN(Datum selection, Compare(lhs, rhs, CompareOptions(op)));
+      ASSERT_OK_AND_ASSIGN(Datum selection,
+                           CallFunction(CompareOperatorToFunctionName(op), {lhs, rhs}));
       ASSERT_OK_AND_ASSIGN(Datum filtered, Filter(lhs, selection));
       auto filtered_array = filtered.make_array();
-      ASSERT_OK(filtered_array->ValidateFull());
+      ValidateOutput(*filtered_array);
       auto expected = CompareAndFilter<TypeParam>(lhs->raw_values(), lhs->length(),
                                                   rhs->raw_values(), op);
       ASSERT_ARRAYS_EQUAL(*filtered_array, *expected);
@@ -428,13 +430,13 @@ TYPED_TEST(TestFilterKernelWithNumeric, ScalarInRangeAndFilterRandomNumeric) {
     auto fifty = std::make_shared<ScalarType>(c_fifty);
     auto hundred = std::make_shared<ScalarType>(c_hundred);
     ASSERT_OK_AND_ASSIGN(Datum greater_than_fifty,
-                         Compare(array, Datum(fifty), CompareOptions(GREATER)));
+                         CallFunction("greater", {array, Datum(fifty)}));
     ASSERT_OK_AND_ASSIGN(Datum less_than_hundred,
-                         Compare(array, Datum(hundred), CompareOptions(LESS)));
+                         CallFunction("less", {array, Datum(hundred)}));
     ASSERT_OK_AND_ASSIGN(Datum selection, And(greater_than_fifty, less_than_hundred));
     ASSERT_OK_AND_ASSIGN(Datum filtered, Filter(array, selection));
     auto filtered_array = filtered.make_array();
-    ASSERT_OK(filtered_array->ValidateFull());
+    ValidateOutput(*filtered_array);
     auto expected = CompareAndFilter<TypeParam>(
         array->raw_values(), array->length(),
         [&](CType e) { return (e > c_fifty) && (e < c_hundred); });
@@ -607,31 +609,31 @@ TEST_F(TestFilterKernelWithStruct, FilterStruct) {
 
 class TestFilterKernelWithUnion : public TestFilterKernel<UnionType> {};
 
-TEST_F(TestFilterKernelWithUnion, DISABLED_FilterUnion) {
-  for (auto union_ : UnionTypeFactories()) {
-    auto union_type = union_({field("a", int32()), field("b", utf8())}, {2, 5});
-    auto union_json = R"([
-      null,
+TEST_F(TestFilterKernelWithUnion, FilterUnion) {
+  auto union_type = dense_union({field("a", int32()), field("b", utf8())}, {2, 5});
+  auto union_json = R"([
+      [2, null],
       [2, 222],
       [5, "hello"],
       [5, "eh"],
-      null,
-      [2, 111]
+      [2, null],
+      [2, 111],
+      [5, null]
     ])";
-    this->AssertFilter(union_type, union_json, "[0, 0, 0, 0, 0, 0]", "[]");
-    this->AssertFilter(union_type, union_json, "[0, 1, 1, null, 0, 1]", R"([
+  this->AssertFilter(union_type, union_json, "[0, 0, 0, 0, 0, 0, 0]", "[]");
+  this->AssertFilter(union_type, union_json, "[0, 1, 1, null, 0, 1, 1]", R"([
       [2, 222],
       [5, "hello"],
-      null,
-      [2, 111]
+      [2, null],
+      [2, 111],
+      [5, null]
     ])");
-    this->AssertFilter(union_type, union_json, "[1, 0, 1, 0, 1, 0]", R"([
-      null,
+  this->AssertFilter(union_type, union_json, "[1, 0, 1, 0, 1, 0, 0]", R"([
+      [2, null],
       [5, "hello"],
-      null
+      [2, null]
     ])");
-    this->AssertFilter(union_type, union_json, "[1, 1, 1, 1, 1, 1]", union_json);
-  }
+  this->AssertFilter(union_type, union_json, "[1, 1, 1, 1, 1, 1, 1]", union_json);
 }
 
 class TestFilterKernelWithRecordBatch : public TestFilterKernel<RecordBatch> {
@@ -642,7 +644,7 @@ class TestFilterKernelWithRecordBatch : public TestFilterKernel<RecordBatch> {
     std::shared_ptr<RecordBatch> actual;
 
     ASSERT_OK(this->DoFilter(schm, batch_json, selection, options, &actual));
-    ASSERT_OK(actual->ValidateFull());
+    ValidateOutput(actual);
     ASSERT_BATCHES_EQUAL(*RecordBatchFromJSON(schm, expected_batch), *actual);
   }
 
@@ -695,7 +697,7 @@ class TestFilterKernelWithChunkedArray : public TestFilterKernel<ChunkedArray> {
                     const std::vector<std::string>& expected) {
     std::shared_ptr<ChunkedArray> actual;
     ASSERT_OK(this->FilterWithArray(type, values, filter, &actual));
-    ASSERT_OK(actual->ValidateFull());
+    ValidateOutput(actual);
     AssertChunkedEqual(*ChunkedArrayFromJSON(type, expected), *actual);
   }
 
@@ -705,7 +707,7 @@ class TestFilterKernelWithChunkedArray : public TestFilterKernel<ChunkedArray> {
                            const std::vector<std::string>& expected) {
     std::shared_ptr<ChunkedArray> actual;
     ASSERT_OK(this->FilterWithChunkedArray(type, values, filter, &actual));
-    ASSERT_OK(actual->ValidateFull());
+    ValidateOutput(actual);
     AssertChunkedEqual(*ChunkedArrayFromJSON(type, expected), *actual);
   }
 
@@ -754,7 +756,7 @@ class TestFilterKernelWithTable : public TestFilterKernel<Table> {
     std::shared_ptr<Table> actual;
 
     ASSERT_OK(this->FilterWithArray(schm, table_json, filter, options, &actual));
-    ASSERT_OK(actual->ValidateFull());
+    ValidateOutput(actual);
     ASSERT_TABLES_EQUAL(*TableFromJSON(schm, expected_table), *actual);
   }
 
@@ -765,7 +767,7 @@ class TestFilterKernelWithTable : public TestFilterKernel<Table> {
     std::shared_ptr<Table> actual;
 
     ASSERT_OK(this->FilterWithChunkedArray(schm, table_json, filter, options, &actual));
-    ASSERT_OK(actual->ValidateFull());
+    ValidateOutput(actual);
     AssertTablesEqual(*TableFromJSON(schm, expected_table), *actual,
                       /*same_chunk_layout=*/false);
   }
@@ -843,7 +845,7 @@ void AssertTakeArrays(const std::shared_ptr<Array>& values,
                       const std::shared_ptr<Array>& indices,
                       const std::shared_ptr<Array>& expected) {
   ASSERT_OK_AND_ASSIGN(std::shared_ptr<Array> actual, Take(*values, *indices));
-  ASSERT_OK(actual->ValidateFull());
+  ValidateOutput(actual);
   AssertArraysEqual(*expected, *actual, /*verbose=*/true);
 }
 
@@ -860,7 +862,7 @@ void CheckTake(const std::shared_ptr<DataType>& type, const std::string& values,
 
   for (auto index_type : {int8(), uint32()}) {
     ASSERT_OK(TakeJSON(type, values, index_type, indices, &actual));
-    ASSERT_OK(actual->ValidateFull());
+    ValidateOutput(actual);
     AssertArraysEqual(*ArrayFromJSON(type, expected), *actual, /*verbose=*/true);
   }
 }
@@ -900,7 +902,7 @@ void ValidateTake(const std::shared_ptr<Array>& values,
                   const std::shared_ptr<Array>& indices) {
   ASSERT_OK_AND_ASSIGN(Datum out, Take(values, indices));
   auto taken = out.make_array();
-  ASSERT_OK(taken->ValidateFull());
+  ValidateOutput(taken);
   ASSERT_EQ(indices->length(), taken->length());
   switch (indices->type_id()) {
     case Type::INT8:
@@ -1281,34 +1283,34 @@ TEST_F(TestTakeKernelWithStruct, TakeStruct) {
 
 class TestTakeKernelWithUnion : public TestTakeKernelTyped<UnionType> {};
 
-// TODO: Restore Union take functionality
-TEST_F(TestTakeKernelWithUnion, DISABLED_TakeUnion) {
-  for (auto union_ : UnionTypeFactories()) {
-    auto union_type = union_({field("a", int32()), field("b", utf8())}, {2, 5});
-    auto union_json = R"([
-      null,
+TEST_F(TestTakeKernelWithUnion, TakeUnion) {
+  auto union_type = dense_union({field("a", int32()), field("b", utf8())}, {2, 5});
+  auto union_json = R"([
+      [2, null],
       [2, 222],
       [5, "hello"],
       [5, "eh"],
-      null,
-      [2, 111]
+      [2, null],
+      [2, 111],
+      [5, null]
     ])";
-    CheckTake(union_type, union_json, "[]", "[]");
-    CheckTake(union_type, union_json, "[3, 1, 3, 1, 3]", R"([
+  CheckTake(union_type, union_json, "[]", "[]");
+  CheckTake(union_type, union_json, "[3, 1, 3, 1, 3]", R"([
       [5, "eh"],
       [2, 222],
       [5, "eh"],
       [2, 222],
       [5, "eh"]
     ])");
-    CheckTake(union_type, union_json, "[4, 2, 1]", R"([
-      null,
+  CheckTake(union_type, union_json, "[4, 2, 1, 6]", R"([
+      [2, null],
       [5, "hello"],
-      [2, 222]
+      [2, 222],
+      [5, null]
     ])");
-    CheckTake(union_type, union_json, "[0, 1, 2, 3, 4, 5]", union_json);
-    CheckTake(union_type, union_json, "[0, 2, 2, 2, 2, 2, 2]", R"([
-      null,
+  CheckTake(union_type, union_json, "[0, 1, 2, 3, 4, 5, 6]", union_json);
+  CheckTake(union_type, union_json, "[0, 2, 2, 2, 2, 2, 2]", R"([
+      [2, null],
       [5, "hello"],
       [5, "hello"],
       [5, "hello"],
@@ -1316,7 +1318,6 @@ TEST_F(TestTakeKernelWithUnion, DISABLED_TakeUnion) {
       [5, "hello"],
       [5, "hello"]
     ])");
-  }
 }
 
 class TestPermutationsWithTake : public TestBase {
@@ -1324,7 +1325,7 @@ class TestPermutationsWithTake : public TestBase {
   void DoTake(const Int16Array& values, const Int16Array& indices,
               std::shared_ptr<Int16Array>* out) {
     ASSERT_OK_AND_ASSIGN(std::shared_ptr<Array> boxed_out, Take(values, indices));
-    ASSERT_OK(boxed_out->ValidateFull());
+    ValidateOutput(boxed_out);
     *out = checked_pointer_cast<Int16Array>(std::move(boxed_out));
   }
 
@@ -1441,7 +1442,7 @@ class TestTakeKernelWithRecordBatch : public TestTakeKernelTyped<RecordBatch> {
 
     for (auto index_type : {int8(), uint32()}) {
       ASSERT_OK(TakeJSON(schm, batch_json, index_type, indices, &actual));
-      ASSERT_OK(actual->ValidateFull());
+      ValidateOutput(actual);
       ASSERT_BATCHES_EQUAL(*RecordBatchFromJSON(schm, expected_batch), *actual);
     }
   }
@@ -1499,7 +1500,7 @@ class TestTakeKernelWithChunkedArray : public TestTakeKernelTyped<ChunkedArray> 
                   const std::vector<std::string>& expected) {
     std::shared_ptr<ChunkedArray> actual;
     ASSERT_OK(this->TakeWithArray(type, values, indices, &actual));
-    ASSERT_OK(actual->ValidateFull());
+    ValidateOutput(actual);
     AssertChunkedEqual(*ChunkedArrayFromJSON(type, expected), *actual);
   }
 
@@ -1509,7 +1510,7 @@ class TestTakeKernelWithChunkedArray : public TestTakeKernelTyped<ChunkedArray> 
                          const std::vector<std::string>& expected) {
     std::shared_ptr<ChunkedArray> actual;
     ASSERT_OK(this->TakeWithChunkedArray(type, values, indices, &actual));
-    ASSERT_OK(actual->ValidateFull());
+    ValidateOutput(actual);
     AssertChunkedEqual(*ChunkedArrayFromJSON(type, expected), *actual);
   }
 
@@ -1557,7 +1558,7 @@ class TestTakeKernelWithTable : public TestTakeKernelTyped<Table> {
     std::shared_ptr<Table> actual;
 
     ASSERT_OK(this->TakeWithArray(schm, table_json, filter, &actual));
-    ASSERT_OK(actual->ValidateFull());
+    ValidateOutput(actual);
     ASSERT_TABLES_EQUAL(*TableFromJSON(schm, expected_table), *actual);
   }
 
@@ -1568,7 +1569,7 @@ class TestTakeKernelWithTable : public TestTakeKernelTyped<Table> {
     std::shared_ptr<Table> actual;
 
     ASSERT_OK(this->TakeWithChunkedArray(schm, table_json, filter, &actual));
-    ASSERT_OK(actual->ValidateFull());
+    ValidateOutput(actual);
     ASSERT_TABLES_EQUAL(*TableFromJSON(schm, expected_table), *actual);
   }
 

@@ -43,6 +43,10 @@ on:
       - 'cpp/**'
       - 'ruby/**'
 
+concurrency:
+  group: ${{ github.repository }}-${{ github.ref }}-${{ github.workflow }}
+  cancel-in-progress: true
+
 env:
   DOCKER_VOLUME_PREFIX: ".docker/"
   ARCHERY_DOCKER_USER: ${{ secrets.DOCKERHUB_USER }}
@@ -183,7 +187,7 @@ jobs:
         mingw-n-bits:
           - 64
         ruby-version:
-          - 2.6
+          - "3.0"
     env:
       ARROW_BUILD_SHARED: ON
       ARROW_BUILD_STATIC: OFF

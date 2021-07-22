@@ -39,6 +39,7 @@ namespace arrow {
 
 namespace dataset {
 
+/// \defgroup dataset-file-formats File formats for reading and writing datasets
 /// \defgroup dataset-filesystem File system datasets
 ///
 /// @{
@@ -157,7 +158,7 @@ class ARROW_DS_EXPORT FileFormat : public std::enable_shared_from_this<FileForma
       const std::shared_ptr<FileFragment>& file) const;
   virtual Future<util::optional<int64_t>> CountRows(
       const std::shared_ptr<FileFragment>& file, compute::Expression predicate,
-      std::shared_ptr<ScanOptions> options);
+      const std::shared_ptr<ScanOptions>& options);
 
   /// \brief Open a fragment
   virtual Result<std::shared_ptr<FileFragment>> MakeFragment(
@@ -175,7 +176,8 @@ class ARROW_DS_EXPORT FileFormat : public std::enable_shared_from_this<FileForma
   /// \brief Create a writer for this format.
   virtual Result<std::shared_ptr<FileWriter>> MakeWriter(
       std::shared_ptr<io::OutputStream> destination, std::shared_ptr<Schema> schema,
-      std::shared_ptr<FileWriteOptions> options) const = 0;
+      std::shared_ptr<FileWriteOptions> options,
+      fs::FileLocator destination_locator) const = 0;
 
   /// \brief Get default write options for this format.
   virtual std::shared_ptr<FileWriteOptions> DefaultWriteOptions() = 0;
@@ -188,7 +190,8 @@ class ARROW_DS_EXPORT FileFragment : public Fragment {
   Result<RecordBatchGenerator> ScanBatchesAsync(
       const std::shared_ptr<ScanOptions>& options) override;
   Future<util::optional<int64_t>> CountRows(
-      compute::Expression predicate, std::shared_ptr<ScanOptions> options) override;
+      compute::Expression predicate,
+      const std::shared_ptr<ScanOptions>& options) override;
 
   std::string type_name() const override { return format_->type_name(); }
   std::string ToString() const override { return source_.path(); };
@@ -226,6 +229,9 @@ class ARROW_DS_EXPORT FileSystemDataset : public Dataset {
   /// \param[in] filesystem the filesystem of each FileFragment, or nullptr if the
   ///            fragments wrap buffers.
   /// \param[in] fragments list of fragments to create the dataset from.
+  /// \param[in] partitioning the Partitioning object in case the dataset is created
+  ///            with a known partitioning (e.g. from a discovered partitioning
+  ///            through a DatasetFactory), or nullptr if not known.
   ///
   /// Note that fragments wrapping files resident in differing filesystems are not
   /// permitted; to work with multiple filesystems use a UnionDataset.
@@ -234,7 +240,8 @@ class ARROW_DS_EXPORT FileSystemDataset : public Dataset {
   static Result<std::shared_ptr<FileSystemDataset>> Make(
       std::shared_ptr<Schema> schema, compute::Expression root_partition,
       std::shared_ptr<FileFormat> format, std::shared_ptr<fs::FileSystem> filesystem,
-      std::vector<std::shared_ptr<FileFragment>> fragments);
+      std::vector<std::shared_ptr<FileFragment>> fragments,
+      std::shared_ptr<Partitioning> partitioning = NULLPTR);
 
   /// \brief Write a dataset.
   static Status Write(const FileSystemDatasetWriteOptions& write_options,
@@ -256,6 +263,10 @@ class ARROW_DS_EXPORT FileSystemDataset : public Dataset {
   /// \brief Return the filesystem. May be nullptr if the fragments wrap buffers.
   const std::shared_ptr<fs::FileSystem>& filesystem() const { return filesystem_; }
 
+  /// \brief Return the partitioning. May be nullptr if the dataset was not constructed
+  /// with a partitioning.
+  const std::shared_ptr<Partitioning>& partitioning() const { return partitioning_; }
+
   std::string ToString() const;
 
  protected:
@@ -275,6 +286,7 @@ class ARROW_DS_EXPORT FileSystemDataset : public Dataset {
   std::shared_ptr<FileFormat> format_;
   std::shared_ptr<fs::FileSystem> filesystem_;
   std::vector<std::shared_ptr<FileFragment>> fragments_;
+  std::shared_ptr<Partitioning> partitioning_;
 
   std::shared_ptr<FragmentSubtrees> subtrees_;
 };
@@ -312,19 +324,23 @@ class ARROW_DS_EXPORT FileWriter {
   const std::shared_ptr<FileFormat>& format() const { return options_->format(); }
   const std::shared_ptr<Schema>& schema() const { return schema_; }
   const std::shared_ptr<FileWriteOptions>& options() const { return options_; }
+  const fs::FileLocator& destination() const { return destination_locator_; }
 
  protected:
   FileWriter(std::shared_ptr<Schema> schema, std::shared_ptr<FileWriteOptions> options,
-             std::shared_ptr<io::OutputStream> destination)
+             std::shared_ptr<io::OutputStream> destination,
+             fs::FileLocator destination_locator)
       : schema_(std::move(schema)),
         options_(std::move(options)),
-        destination_(destination) {}
+        destination_(std::move(destination)),
+        destination_locator_(std::move(destination_locator)) {}
 
   virtual Status FinishInternal() = 0;
 
   std::shared_ptr<Schema> schema_;
   std::shared_ptr<FileWriteOptions> options_;
   std::shared_ptr<io::OutputStream> destination_;
+  fs::FileLocator destination_locator_;
 };
 
 /// \brief Options for writing a dataset.
@@ -347,6 +363,18 @@ struct ARROW_DS_EXPORT FileSystemDatasetWriteOptions {
   /// Template string used to generate fragment basenames.
   /// {i} will be replaced by an auto incremented integer.
   std::string basename_template;
+
+  /// Callback to be invoked against all FileWriters before
+  /// they are finalized with FileWriter::Finish().
+  std::function<Status(FileWriter*)> writer_pre_finish = [](FileWriter*) {
+    return Status::OK();
+  };
+
+  /// Callback to be invoked against all FileWriters after they have
+  /// called FileWriter::Finish().
+  std::function<Status(FileWriter*)> writer_post_finish = [](FileWriter*) {
+    return Status::OK();
+  };
 
   const std::shared_ptr<FileFormat>& format() const {
     return file_write_options->format();
