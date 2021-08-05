@@ -1550,6 +1550,9 @@ if(ARROW_JEMALLOC)
        # See https://github.com/jemalloc/jemalloc/issues/1237
        "--disable-initial-exec-tls"
        ${EP_LOG_OPTIONS})
+  if(EMSCRIPTEN)
+    list(APPEND JEMALLOC_CONFIGURE_COMMAND "--with-lg-vaddr=32")
+  endif()
   set(JEMALLOC_BUILD_COMMAND ${MAKE} ${MAKE_BUILD_ARGS})
   if(CMAKE_OSX_SYSROOT)
     list(APPEND JEMALLOC_BUILD_COMMAND "SDKROOT=${CMAKE_OSX_SYSROOT}")

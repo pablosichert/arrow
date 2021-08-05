@@ -23,6 +23,10 @@
 
 #include "gandiva/engine.h"
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
+
 #include <iostream>
 #include <memory>
 #include <mutex>
@@ -32,6 +36,7 @@
 #include <utility>
 
 #include "arrow/util/logging.h"
+#include "gandiva/selection_vector.h"
 
 #if defined(_MSC_VER)
 #pragma warning(push)
@@ -89,11 +94,20 @@ static llvm::SmallVector<std::string, 10> cpu_attrs;
 void Engine::InitOnce() {
   DCHECK_EQ(llvm_init, false);
 
+#ifdef __EMSCRIPTEN__
+  LLVMInitializeWebAssemblyTargetInfo();
+  LLVMInitializeWebAssemblyTarget();
+  LLVMInitializeWebAssemblyTargetMC();
+  LLVMInitializeWebAssemblyAsmPrinter();
+  LLVMInitializeWebAssemblyAsmParser();
+  LLVMInitializeWebAssemblyDisassembler();
+#else
   llvm::InitializeNativeTarget();
   llvm::InitializeNativeTargetAsmPrinter();
   llvm::InitializeNativeTargetAsmParser();
   llvm::InitializeNativeTargetDisassembler();
   llvm::sys::DynamicLibrary::LoadLibraryPermanently(nullptr);
+#endif
 
   cpu_name = llvm::sys::getHostCPUName();
   llvm::StringMap<bool> host_features;
@@ -161,7 +175,22 @@ Status Engine::Make(const std::shared_ptr<Configuration>& conf,
     engine_builder.setMCPU(cpu_name);
     engine_builder.setMAttrs(cpu_attrs);
   }
+
+#ifdef __EMSCRIPTEN__
+  auto TT(llvm::Triple::normalize("wasm32-unknown-unknown"));
+  std::string CPU("");
+  std::string FS("");
+
+  std::string Error;
+  const llvm::Target* TheTarget = llvm::TargetRegistry::lookupTarget(TT, Error);
+  assert(TheTarget);
+
+  auto tm = TheTarget->createTargetMachine(TT, CPU, FS, llvm::TargetOptions(), llvm::None,
+                                           llvm::None, llvm::CodeGenOpt::Default);
+  std::unique_ptr<llvm::ExecutionEngine> exec_engine{engine_builder.create(tm)};
+#else
   std::unique_ptr<llvm::ExecutionEngine> exec_engine{engine_builder.create()};
+#endif
 
   if (exec_engine == nullptr) {
     return Status::CodeGenError("Could not instantiate llvm::ExecutionEngine: ",
@@ -185,7 +214,11 @@ Status Engine::Make(const std::shared_ptr<Configuration>& conf,
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 static void SetDataLayout(llvm::Module* module) {
+#ifdef __EMSCRIPTEN__
+  auto target_triple = std::string("wasm32-unknown-unknown-wasm");
+#else
   auto target_triple = llvm::sys::getDefaultTargetTriple();
+#endif
   std::string error_message;
   auto target = llvm::TargetRegistry::lookupTarget(target_triple, error_message);
   if (!target) {
@@ -315,6 +348,23 @@ void* Engine::CompiledFunction(llvm::Function* irFunction) {
   DCHECK(module_finalized_);
   return execution_engine_->getPointerToFunction(irFunction);
 }
+
+#ifdef __EMSCRIPTEN__
+void Engine::SetCompiledFunction(llvm::Function* irFunction, SelectionVector::Mode mode) {
+  execution_engine_->generateCodeForModule(irFunction->getParent());
+  EM_ASM(
+      {
+        const mode = $0;
+        const bitcode = FS.readFile("/jit.wasm");
+        const module = new WebAssembly.Module(bitcode);
+        const instance =
+            new WebAssembly.Instance(module, {env : {__linear_memory : wasmMemory}});
+        window.jitFunctions = window.jitFunctions || [];
+        window.jitFunctions[mode] = instance.exports._start;
+      },
+      static_cast<int>(mode));
+}
+#endif
 
 void Engine::AddGlobalMappingForFunc(const std::string& name, llvm::Type* ret_type,
                                      const std::vector<llvm::Type*>& args,

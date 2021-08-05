@@ -251,3 +251,23 @@ endif()
 
 add_subdirectory(precompiled)
 add_subdirectory(tests)
+
+if(EMSCRIPTEN)
+  add_executable(gandiva_wasm wasm_bindings.cc)
+  target_link_libraries(gandiva_wasm gandiva_static LLVM::LLVM_INTERFACE)
+  set_property(TARGET gandiva_wasm PROPERTY POSITION_INDEPENDENT_CODE ON)
+  set_target_properties(
+      gandiva_wasm
+      PROPERTIES
+        LINK_FLAGS
+        " \
+          -fwasm-exceptions \
+          -s ASSERTIONS=1 \
+          -s MODULARIZE=1 \
+          -s EXPORT_ES6=1 \
+          -s EXPORTED_RUNTIME_METHODS=FS,ccall \
+          -s ENVIRONMENT='web,node' \
+          --bind \
+        "
+  )
+endif()
