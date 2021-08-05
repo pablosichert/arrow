@@ -17,6 +17,10 @@
 
 #include "gandiva/llvm_generator.h"
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
+
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -82,8 +86,12 @@ Status LLVMGenerator::Build(const ExpressionVector& exprs, SelectionVector::Mode
   // setup the jit functions for each expression.
   for (auto& compiled_expr : compiled_exprs_) {
     auto ir_fn = compiled_expr->GetIRFunction(mode);
+#ifdef __EMSCRIPTEN__
+    engine_->SetCompiledFunction(ir_fn, selection_vector_mode_);
+#else
     auto jit_fn = reinterpret_cast<EvalFunc>(engine_->CompiledFunction(ir_fn));
     compiled_expr->SetJITFunction(selection_vector_mode_, jit_fn);
+#endif
   }
 
   return Status::OK();
@@ -123,10 +131,37 @@ Status LLVMGenerator::Execute(const arrow::RecordBatch& record_batch,
       num_output_rows = selection_vector->GetNumSlots();
     }
 
+#ifdef __EMSCRIPTEN__
+    {
+      auto* inputs_addr = eval_batch->GetBufferArray();
+      auto* inputs_addr_offsets = eval_batch->GetBufferOffsetArray();
+      auto* local_bitmaps = eval_batch->GetLocalBitMapArray();
+      auto* selection_vector = selection_buffer;
+      auto* context_ptr = eval_batch->GetExecutionContext();
+      auto nrecords = (size_t)num_output_rows;
+
+      EM_ASM(
+          {
+            const mode = $0;
+            const inputs_addr = $1;
+            const inputs_addr_offsets = $2;
+            const local_bitmaps = $3;
+            const selection_vector = $4;
+            const context_ptr = $5;
+            const nrecords = BigInt($6);
+
+            window.jitFunctions[mode](inputs_addr, inputs_addr_offsets, local_bitmaps,
+                                      selection_vector, context_ptr, nrecords);
+          },
+          mode, inputs_addr, inputs_addr_offsets, local_bitmaps, selection_vector,
+          context_ptr, nrecords);
+    }
+#else
     EvalFunc jit_function = compiled_expr->GetJITFunction(mode);
     jit_function(eval_batch->GetBufferArray(), eval_batch->GetBufferOffsetArray(),
                  eval_batch->GetLocalBitMapArray(), selection_buffer,
                  (void*)eval_batch->GetExecutionContext(), num_output_rows);
+#endif
 
     // check for execution errors
     ARROW_RETURN_IF(
@@ -276,6 +311,9 @@ Status LLVMGenerator::CodeGenExprValue(DexPtr value_expr, int buffer_count,
   *fn = llvm::Function::Create(prototype, llvm::GlobalValue::ExternalLinkage, func_name,
                                module());
   ARROW_RETURN_IF((*fn == nullptr), Status::CodeGenError("Error creating function."));
+#ifdef __EMSCRIPTEN__
+  (*fn)->addFnAttr("wasm-export-name", "_start");
+#endif
 
   // Name the arguments
   llvm::Function::arg_iterator args = (*fn)->arg_begin();
