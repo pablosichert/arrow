@@ -356,11 +356,10 @@ void Engine::SetCompiledFunction(llvm::Function* irFunction, SelectionVector::Mo
       {
         const mode = $0;
         const bitcode = FS.readFile("/jit.wasm");
-        const module = new WebAssembly.Module(bitcode);
-        const instance =
-            new WebAssembly.Instance(module, {env : {__linear_memory : wasmMemory}});
-        window.jitFunctions = window.jitFunctions || [];
-        window.jitFunctions[mode] = instance.exports._start;
+        Module.jitFunctions = Module.jitFunctions || [];
+        Module.jitFunctions[mode] =
+            WebAssembly.instantiate(bitcode, {env : {__linear_memory : wasmMemory}})
+                .then(function(instance){return instance.exports._start});
       },
       static_cast<int>(mode));
 }

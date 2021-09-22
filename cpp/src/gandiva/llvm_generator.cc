@@ -150,8 +150,9 @@ Status LLVMGenerator::Execute(const arrow::RecordBatch& record_batch,
             const context_ptr = $5;
             const nrecords = BigInt($6);
 
-            window.jitFunctions[mode](inputs_addr, inputs_addr_offsets, local_bitmaps,
-                                      selection_vector, context_ptr, nrecords);
+            Module.jitFunctions[mode].then(
+                function(fn){fn(inputs_addr, inputs_addr_offsets, local_bitmaps,
+                                selection_vector, context_ptr, nrecords)});
           },
           mode, inputs_addr, inputs_addr_offsets, local_bitmaps, selection_vector,
           context_ptr, nrecords);
