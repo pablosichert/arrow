@@ -1,5 +1,6 @@
 #include <emscripten.h>
 #include <emscripten/bind.h>
+#include <gandiva/selection_vector.h>
 
 #include <iostream>
 #include <memory>
@@ -9,6 +10,8 @@
 #include "arrow/ipc/writer.h"
 #include "arrow/memory_pool.h"
 #include "arrow/table.h"
+#include "arrow/type_fwd.h"
+#include "gandiva/filter.h"
 #include "gandiva/gandiva_aliases.h"
 #include "gandiva/node.h"
 #include "gandiva/projector.h"
@@ -43,13 +46,53 @@ class Reader {
       : buffer(std::move(buffer)), file(file), reader(reader) {}
 };
 
-using FieldPtr = std::shared_ptr<arrow::Field>;
-using ProjectorPtr = std::shared_ptr<Projector>;
-using RecordBatchPtr = std::shared_ptr<arrow::RecordBatch>;
 using ArrayPtr = std::shared_ptr<arrow::Array>;
-using RecordBatchFileReaderPtr = std::shared_ptr<arrow::ipc::RecordBatchFileReader>;
-using ReaderPtr = std::shared_ptr<Reader>;
 using BufferPtr = std::shared_ptr<arrow::Buffer>;
+using FieldPtr = std::shared_ptr<arrow::Field>;
+using FilterPtr = std::shared_ptr<Filter>;
+using ProjectorPtr = std::shared_ptr<Projector>;
+using ReaderPtr = std::shared_ptr<Reader>;
+using RecordBatchFileReaderPtr = std::shared_ptr<arrow::ipc::RecordBatchFileReader>;
+using RecordBatchPtr = std::shared_ptr<arrow::RecordBatch>;
+using SelectionVectorPtr = std::shared_ptr<SelectionVector>;
+
+DataTypePtr type_null() { return arrow::null(); }
+
+DataTypePtr type_boolean() { return arrow::boolean(); }
+
+DataTypePtr type_int8() { return arrow::int8(); }
+
+DataTypePtr type_int16() { return arrow::int16(); }
+
+DataTypePtr type_int32() { return arrow::int32(); }
+
+DataTypePtr type_int64() { return arrow::int64(); }
+
+DataTypePtr type_uint8() { return arrow::uint8(); }
+
+DataTypePtr type_uint16() { return arrow::uint16(); }
+
+DataTypePtr type_uint32() { return arrow::uint32(); }
+
+DataTypePtr type_uint64() { return arrow::uint64(); }
+
+DataTypePtr type_float16() { return arrow::float16(); }
+
+DataTypePtr type_float32() { return arrow::float32(); }
+
+DataTypePtr type_float64() { return arrow::float64(); }
+
+DataTypePtr type_utf8() { return arrow::utf8(); }
+
+DataTypePtr type_large_utf8() { return arrow::large_utf8(); }
+
+DataTypePtr type_binary() { return arrow::binary(); }
+
+DataTypePtr type_large_binary() { return arrow::large_binary(); }
+
+DataTypePtr type_date32() { return arrow::date32(); }
+
+DataTypePtr type_date64() { return arrow::date64(); }
 
 NodePtr make_literal_bool(bool value) { return TreeExprBuilder::MakeLiteral(value); }
 
@@ -212,6 +255,13 @@ ProjectorPtr make_projector(SchemaPtr schema, const ExpressionVector& exprs) {
   return projector;
 }
 
+FilterPtr make_filter(SchemaPtr schema, ConditionPtr condition) {
+  auto configuration = make_configuration();
+  FilterPtr filter;
+  ARROW_EXPECT_OK(Filter::Make(schema, condition, configuration, &filter));
+  return filter;
+}
+
 SchemaPtr make_schema(FieldVector fields) {
   return std::make_shared<arrow::Schema>(fields);
 }
@@ -220,6 +270,19 @@ BufferPtr projector_evaluate(ProjectorPtr projector, SchemaPtr schema,
                              RecordBatchPtr batch) {
   arrow::ArrayVector outputs;
   ARROW_EXPECT_OK(projector->Evaluate(*batch, arrow::default_memory_pool(), &outputs));
+  auto table = arrow::Table::Make(schema, outputs);
+  auto sink = arrow::io::BufferOutputStream::Create().ValueOrDie();
+  auto writer = arrow::ipc::MakeFileWriter(sink, schema).ValueOrDie();
+  ARROW_EXPECT_OK(writer->WriteTable(*table));
+  ARROW_EXPECT_OK(writer->Close());
+  return sink->Finish().ValueOrDie();
+}
+
+BufferPtr filter_evaluate(FilterPtr filter, SchemaPtr schema,
+                          SelectionVectorPtr selection_vector, RecordBatchPtr batch) {
+  ARROW_EXPECT_OK(filter->Evaluate(*batch, selection_vector));
+  auto output = selection_vector->ToArray();
+  auto outputs = arrow::ArrayVector{output};
   auto table = arrow::Table::Make(schema, outputs);
   auto sink = arrow::io::BufferOutputStream::Create().ValueOrDie();
   auto writer = arrow::ipc::MakeFileWriter(sink, schema).ValueOrDie();
@@ -244,6 +307,10 @@ int schema_num_fields(SchemaPtr schema) { return schema->num_fields(); }
 
 FieldPtr schema_field(SchemaPtr schema, int index) { return schema->field(index); }
 
+FieldPtr schema_field_by_name(SchemaPtr schema, const std::string& name) {
+  return schema->GetFieldByName(name);
+}
+
 FieldVector schema_fields(SchemaPtr schema) { return schema->fields(); }
 
 SchemaPtr reader_schema(ReaderPtr reader) { return reader->reader->schema(); }
@@ -256,31 +323,65 @@ RecordBatchPtr reader_read_record_batch(ReaderPtr reader, int index) {
   return reader->reader->ReadRecordBatch(index).ValueOrDie();
 }
 
+int batch_num_columns(RecordBatchPtr batch) { return batch->num_columns(); }
+
+int batch_num_rows(RecordBatchPtr batch) { return batch->num_rows(); }
+
+SelectionVectorPtr selection_vector_make_int16(int max_slots) {
+  std::shared_ptr<SelectionVector> selection_vector;
+  ARROW_EXPECT_OK(SelectionVector::MakeInt16(max_slots, arrow::default_memory_pool(),
+                                             &selection_vector));
+  return selection_vector;
+}
+
+SelectionVectorPtr selection_vector_make_int32(int max_slots) {
+  std::shared_ptr<SelectionVector> selection_vector;
+  ARROW_EXPECT_OK(SelectionVector::MakeInt32(max_slots, arrow::default_memory_pool(),
+                                             &selection_vector));
+  return selection_vector;
+}
+
+SelectionVectorPtr selection_vector_make_int64(int max_slots) {
+  std::shared_ptr<SelectionVector> selection_vector;
+  ARROW_EXPECT_OK(SelectionVector::MakeInt64(max_slots, arrow::default_memory_pool(),
+                                             &selection_vector));
+  return selection_vector;
+}
+
 EMSCRIPTEN_BINDINGS() {
   using namespace emscripten;
 
   class_<arrow::Array>("Array").smart_ptr<ArrayPtr>("ArrayPtr");
   class_<arrow::Buffer>("Buffer").smart_ptr<BufferPtr>("BufferPtr");
+  class_<arrow::DataType>("DataType").smart_ptr<DataTypePtr>("DataTypePtr");
   class_<arrow::Field>("Field").smart_ptr<FieldPtr>("FieldPtr");
   class_<arrow::RecordBatch>("RecordBatch").smart_ptr<RecordBatchPtr>("RecordBatchPtr");
   class_<arrow::Schema>("Schema").smart_ptr<SchemaPtr>("SchemaPtr");
   class_<Condition>("Condition").smart_ptr<ConditionPtr>("ConditionPtr");
   class_<Expression>("Expression").smart_ptr<ExpressionPtr>("ExpressionPtr");
+  class_<Filter>("Filter").smart_ptr<FilterPtr>("FilterPtr");
   class_<Node>("Node").smart_ptr<NodePtr>("NodePtr");
   class_<Projector>("Projector").smart_ptr<ProjectorPtr>("ProjectorPtr");
   class_<Reader>("Reader").smart_ptr<ReaderPtr>("ReaderPtr");
+  class_<SelectionVector>("SelectionVector")
+      .smart_ptr<SelectionVectorPtr>("SelectionVectorPtr");
 
   register_vector<ArrayPtr>("ArrayVector");
   register_vector<ExpressionPtr>("ExpressionVector");
   register_vector<FieldPtr>("FieldVector");
+  register_vector<NodePtr>("NodeVector");
 
+  function("batchNumColumns", &batch_num_columns);
+  function("batchNumRows", &batch_num_rows);
   function("bufferView", &buffer_view);
+  function("filterEvaluate", &filter_evaluate);
   function("makeAnd", &make_and);
   function("makeBinaryLiteral", &make_binary_literal);
   function("makeCondition", &make_condition);
   function("makeDecimalLiteral", &make_decimal_literal);
   function("makeExpression", &make_expression);
   function("makeField", &make_field);
+  function("makeFilter", &make_filter);
   function("makeFunction", &make_function);
   function("makeFunctionCondition", &make_function_condition);
   function("makeFunctionExpression", &make_function_expression);
@@ -319,6 +420,29 @@ EMSCRIPTEN_BINDINGS() {
   function("readerReadRecordBatch", &reader_read_record_batch);
   function("readerSchema", &reader_schema);
   function("schemaField", &schema_field);
+  function("schemaFieldByName", &schema_field_by_name);
   function("schemaFields", &schema_fields);
   function("schemaNumFields", &schema_num_fields);
+  function("selectionVectorMakeInt16", &selection_vector_make_int16);
+  function("selectionVectorMakeInt32", &selection_vector_make_int32);
+  function("selectionVectorMakeInt64", &selection_vector_make_int64);
+  function("typeBinary", &type_binary);
+  function("typeBoolean", &type_boolean);
+  function("typeDate32", &type_date32);
+  function("typeDate64", &type_date64);
+  function("typeFloat16", &type_float16);
+  function("typeFloat32", &type_float32);
+  function("typeFloat64", &type_float64);
+  function("typeInt16", &type_int16);
+  function("typeInt32", &type_int32);
+  function("typeInt64", &type_int64);
+  function("typeInt8", &type_int8);
+  function("typeLargeBinary", &type_large_binary);
+  function("typeLargeUTF8", &type_large_utf8);
+  function("typeNull", &type_null);
+  function("typeUInt16", &type_uint16);
+  function("typeUInt32", &type_uint32);
+  function("typeUInt64", &type_uint64);
+  function("typeUInt8", &type_uint8);
+  function("typeUTF8", &type_utf8);
 }
