@@ -33,6 +33,8 @@ using namespace gandiva;
                           << _st.ToString();                            \
   } while (false)
 
+static bool optimize = true;
+
 class Reader {
  private:
   std::string buffer;
@@ -240,11 +242,12 @@ NodePtr make_in_expression_timestamp(NodePtr node,
   return TreeExprBuilder::MakeInExpressionTimeStamp(node, constants);
 }
 
+void set_optimize(bool flag) { optimize = flag; }
+
 std::shared_ptr<Configuration> make_configuration() {
   auto builder = ConfigurationBuilder();
   auto configuration = builder.DefaultConfiguration();
-  configuration->set_optimize(false);
-  configuration->target_host_cpu(false);
+  configuration->set_optimize(optimize);
   return configuration;
 }
 
@@ -465,6 +468,7 @@ EMSCRIPTEN_BINDINGS() {
   function("selectionVectorMakeInt32", &selection_vector_make_int32);
   function("selectionVectorMakeInt64", &selection_vector_make_int64);
   function("selectionVectorToBuffer", &selection_vector_to_buffer);
+  function("setOptimize", &set_optimize);
   function("typeBinary", &type_binary);
   function("typeBoolean", &type_boolean);
   function("typeDate32", &type_date32);
