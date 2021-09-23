@@ -255,6 +255,16 @@ ProjectorPtr make_projector(SchemaPtr schema, const ExpressionVector& exprs) {
   return projector;
 }
 
+ProjectorPtr make_projector_with_selection_vector_mode(
+    SchemaPtr schema, const ExpressionVector& exprs,
+    SelectionVector::Mode selection_vector_mode) {
+  auto configuration = make_configuration();
+  ProjectorPtr projector;
+  ARROW_EXPECT_OK(
+      Projector::Make(schema, exprs, selection_vector_mode, configuration, &projector));
+  return projector;
+}
+
 FilterPtr make_filter(SchemaPtr schema, ConditionPtr condition) {
   auto configuration = make_configuration();
   FilterPtr filter;
@@ -266,29 +276,23 @@ SchemaPtr make_schema(FieldVector fields) {
   return std::make_shared<arrow::Schema>(fields);
 }
 
-BufferPtr projector_evaluate(ProjectorPtr projector, SchemaPtr schema,
-                             RecordBatchPtr batch) {
+arrow::ArrayVector projector_evaluate(ProjectorPtr projector, RecordBatchPtr batch) {
   arrow::ArrayVector outputs;
   ARROW_EXPECT_OK(projector->Evaluate(*batch, arrow::default_memory_pool(), &outputs));
-  auto table = arrow::Table::Make(schema, outputs);
-  auto sink = arrow::io::BufferOutputStream::Create().ValueOrDie();
-  auto writer = arrow::ipc::MakeFileWriter(sink, schema).ValueOrDie();
-  ARROW_EXPECT_OK(writer->WriteTable(*table));
-  ARROW_EXPECT_OK(writer->Close());
-  return sink->Finish().ValueOrDie();
+  return outputs;
 }
 
-BufferPtr filter_evaluate(FilterPtr filter, SchemaPtr schema,
-                          SelectionVectorPtr selection_vector, RecordBatchPtr batch) {
+arrow::ArrayVector projector_evaluate_with_selection_vector(
+    ProjectorPtr projector, SelectionVectorPtr selection_vector, RecordBatchPtr batch) {
+  arrow::ArrayVector outputs;
+  ARROW_EXPECT_OK(projector->Evaluate(*batch, &*selection_vector,
+                                      arrow::default_memory_pool(), &outputs));
+  return outputs;
+}
+
+void filter_evaluate(FilterPtr filter, SelectionVectorPtr selection_vector,
+                     RecordBatchPtr batch) {
   ARROW_EXPECT_OK(filter->Evaluate(*batch, selection_vector));
-  auto output = selection_vector->ToArray();
-  auto outputs = arrow::ArrayVector{output};
-  auto table = arrow::Table::Make(schema, outputs);
-  auto sink = arrow::io::BufferOutputStream::Create().ValueOrDie();
-  auto writer = arrow::ipc::MakeFileWriter(sink, schema).ValueOrDie();
-  ARROW_EXPECT_OK(writer->WriteTable(*table));
-  ARROW_EXPECT_OK(writer->Close());
-  return sink->Finish().ValueOrDie();
 }
 
 emscripten::val buffer_view(BufferPtr buffer) {
@@ -348,6 +352,28 @@ SelectionVectorPtr selection_vector_make_int64(int max_slots) {
   return selection_vector;
 }
 
+BufferPtr selection_vector_to_buffer(SelectionVectorPtr selection_vector,
+                                     SchemaPtr schema) {
+  auto vector = selection_vector->ToArray();
+  auto array_vector = arrow::ArrayVector{vector};
+  auto table = arrow::Table::Make(schema, array_vector);
+  auto sink = arrow::io::BufferOutputStream::Create().ValueOrDie();
+  auto writer = arrow::ipc::MakeFileWriter(sink, schema).ValueOrDie();
+  ARROW_EXPECT_OK(writer->WriteTable(*table));
+  ARROW_EXPECT_OK(writer->Close());
+  return sink->Finish().ValueOrDie();
+}
+
+BufferPtr array_vector_to_buffer(const arrow::ArrayVector& array_vector,
+                                 SchemaPtr schema) {
+  auto table = arrow::Table::Make(schema, array_vector);
+  auto sink = arrow::io::BufferOutputStream::Create().ValueOrDie();
+  auto writer = arrow::ipc::MakeFileWriter(sink, schema).ValueOrDie();
+  ARROW_EXPECT_OK(writer->WriteTable(*table));
+  ARROW_EXPECT_OK(writer->Close());
+  return sink->Finish().ValueOrDie();
+}
+
 EMSCRIPTEN_BINDINGS() {
   using namespace emscripten;
 
@@ -371,6 +397,14 @@ EMSCRIPTEN_BINDINGS() {
   register_vector<FieldPtr>("FieldVector");
   register_vector<NodePtr>("NodeVector");
 
+  enum_<SelectionVector::Mode>("SelectionVectorMode")
+      .value("NONE", SelectionVector::MODE_NONE)
+      .value("UINT16", SelectionVector::MODE_UINT16)
+      .value("UINT32", SelectionVector::MODE_UINT32)
+      .value("UINT64", SelectionVector::MODE_UINT64)
+      .value("MAX", SelectionVector::MODE_MAX);
+
+  function("arrayVectorToBuffer", &array_vector_to_buffer);
   function("batchNumColumns", &batch_num_columns);
   function("batchNumRows", &batch_num_rows);
   function("bufferView", &buffer_view);
@@ -412,10 +446,14 @@ EMSCRIPTEN_BINDINGS() {
   function("makeNull", &make_null);
   function("makeOr", &make_or);
   function("makeProjector", &make_projector);
+  function("makeProjectorWithSelectionVectorMode",
+           &make_projector_with_selection_vector_mode);
   function("makeReader", &make_reader);
   function("makeSchema", &make_schema);
   function("makeStringLiteral", &make_string_literal);
   function("projectorEvaluate", &projector_evaluate);
+  function("projectorEvaluateWithSelectionVector",
+           &projector_evaluate_with_selection_vector);
   function("readerNumRecordBatches", &reader_num_record_batches);
   function("readerReadRecordBatch", &reader_read_record_batch);
   function("readerSchema", &reader_schema);
@@ -426,6 +464,7 @@ EMSCRIPTEN_BINDINGS() {
   function("selectionVectorMakeInt16", &selection_vector_make_int16);
   function("selectionVectorMakeInt32", &selection_vector_make_int32);
   function("selectionVectorMakeInt64", &selection_vector_make_int64);
+  function("selectionVectorToBuffer", &selection_vector_to_buffer);
   function("typeBinary", &type_binary);
   function("typeBoolean", &type_boolean);
   function("typeDate32", &type_date32);
