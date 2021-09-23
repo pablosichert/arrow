@@ -266,6 +266,7 @@ if(EMSCRIPTEN)
           -s ASSERTIONS=1 \
           -s MODULARIZE=1 \
           -s EXPORT_ES6=1 \
+          -s EXPORTED_FUNCTIONS=_memcmp \
           -s EXPORTED_RUNTIME_METHODS=FS,ccall \
           -s ENVIRONMENT='web,node' \
           --bind \
