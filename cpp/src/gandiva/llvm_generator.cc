@@ -133,6 +133,9 @@ Status LLVMGenerator::Execute(const arrow::RecordBatch& record_batch,
 
 #ifdef __EMSCRIPTEN__
     {
+      auto name = compiled_expr->GetIRFunction(mode)
+                      ->getFnAttribute("wasm-export-name")
+                      .getValueAsString();
       auto* inputs_addr = eval_batch->GetBufferArray();
       auto* inputs_addr_offsets = eval_batch->GetBufferOffsetArray();
       auto* local_bitmaps = eval_batch->GetLocalBitMapArray();
@@ -142,7 +145,7 @@ Status LLVMGenerator::Execute(const arrow::RecordBatch& record_batch,
 
       EM_ASM(
           {
-            const mode = $0;
+            const name = UTF8ToString($0);
             const inputs_addr = $1;
             const inputs_addr_offsets = $2;
             const local_bitmaps = $3;
@@ -150,10 +153,10 @@ Status LLVMGenerator::Execute(const arrow::RecordBatch& record_batch,
             const context_ptr = $5;
             const nrecords = BigInt($6);
 
-            window.jitFunctions[mode](inputs_addr, inputs_addr_offsets, local_bitmaps,
+            Module.jitFunctions[name](inputs_addr, inputs_addr_offsets, local_bitmaps,
                                       selection_vector, context_ptr, nrecords);
           },
-          mode, inputs_addr, inputs_addr_offsets, local_bitmaps, selection_vector,
+          name.data(), inputs_addr, inputs_addr_offsets, local_bitmaps, selection_vector,
           context_ptr, nrecords);
     }
 #else
@@ -312,7 +315,7 @@ Status LLVMGenerator::CodeGenExprValue(DexPtr value_expr, int buffer_count,
                                module());
   ARROW_RETURN_IF((*fn == nullptr), Status::CodeGenError("Error creating function."));
 #ifdef __EMSCRIPTEN__
-  (*fn)->addFnAttr("wasm-export-name", "_start");
+  (*fn)->addFnAttr("wasm-export-name", func_name);
 #endif
 
   // Name the arguments
