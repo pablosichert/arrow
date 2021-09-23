@@ -358,8 +358,19 @@ void Engine::SetCompiledFunction(llvm::Function* irFunction, SelectionVector::Mo
         const name = UTF8ToString($0);
         const bitcode = FS.readFile("/jit.wasm");
         const module = new WebAssembly.Module(bitcode);
-        const instance = new WebAssembly.Instance(
-            module, {env : {__linear_memory : wasmMemory, memcmp : _memcmp}});
+        const instance = new WebAssembly.Instance(module, {
+          env : {
+            __linear_memory : wasmMemory,
+            __indirect_function_table : wasmTable,
+            __stack_pointer : new WebAssembly.Global({value : 'i32', mutable : true},
+                                                     Module.___stack_pointer),
+            malloc : _malloc,
+            free : _free,
+            memcmp : _memcmp,
+            snprintf : _snprintf,
+            gdv_fn_context_set_error_msg : _gdv_fn_context_set_error_msg,
+          }
+        });
         Module.jitFunctions = Module.jitFunctions || [];
         Module.jitFunctions[name] = instance.exports[name];
       },
