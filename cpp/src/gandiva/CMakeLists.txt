@@ -263,6 +263,7 @@ if(EMSCRIPTEN)
         LINK_FLAGS
         " \
           -fwasm-exceptions \
+          -s ALLOW_MEMORY_GROWTH=1 \
           -s ASSERTIONS=1 \
           -s MODULARIZE=1 \
           -s EXPORT_ES6=1 \
