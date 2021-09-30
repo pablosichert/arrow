@@ -244,6 +244,11 @@ NodePtr make_in_expression_timestamp(NodePtr node,
 
 void set_optimize(bool flag) { optimize = flag; }
 
+void set_cache_capacity(int capacity) {
+  auto capacity_string = std::to_string(capacity);
+  setenv("GANDIVA_CACHE_SIZE", capacity_string.c_str(), true);
+}
+
 std::shared_ptr<Configuration> make_configuration() {
   auto builder = ConfigurationBuilder();
   auto configuration = builder.DefaultConfiguration();
@@ -468,6 +473,7 @@ EMSCRIPTEN_BINDINGS() {
   function("selectionVectorMakeInt32", &selection_vector_make_int32);
   function("selectionVectorMakeInt64", &selection_vector_make_int64);
   function("selectionVectorToBuffer", &selection_vector_to_buffer);
+  function("setCacheCapacity", &set_cache_capacity);
   function("setOptimize", &set_optimize);
   function("typeBinary", &type_binary);
   function("typeBoolean", &type_boolean);
