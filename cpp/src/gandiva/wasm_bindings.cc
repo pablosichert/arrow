@@ -132,15 +132,15 @@ NodePtr make_literal_float(float value) { return TreeExprBuilder::MakeLiteral(va
 
 NodePtr make_literal_double(double value) { return TreeExprBuilder::MakeLiteral(value); }
 
-NodePtr make_string_literal(const std::string& value) {
+NodePtr make_literal_string(const std::string& value) {
   return TreeExprBuilder::MakeStringLiteral(value);
 }
 
-NodePtr make_binary_literal(const std::string& value) {
+NodePtr make_literal_binary(const std::string& value) {
   return TreeExprBuilder::MakeBinaryLiteral(value);
 }
 
-NodePtr make_decimal_literal(const DecimalScalar128& value) {
+NodePtr make_literal_decimal(const DecimalScalar128& value) {
   return TreeExprBuilder::MakeDecimalLiteral(value);
 }
 
@@ -418,9 +418,7 @@ EMSCRIPTEN_BINDINGS() {
   function("bufferView", &buffer_view);
   function("filterEvaluate", &filter_evaluate);
   function("makeAnd", &make_and);
-  function("makeBinaryLiteral", &make_binary_literal);
   function("makeCondition", &make_condition);
-  function("makeDecimalLiteral", &make_decimal_literal);
   function("makeExpression", &make_expression);
   function("makeField", &make_field);
   function("makeFilter", &make_filter);
@@ -440,13 +438,16 @@ EMSCRIPTEN_BINDINGS() {
   function("makeInExpressionTime32", &make_in_expression_time32);
   function("makeInExpressionTime64", &make_in_expression_time64);
   function("makeInExpressionTimestamp", &make_in_expression_timestamp);
+  function("makeLiteralBinary", &make_literal_binary);
   function("makeLiteralBool", &make_literal_bool);
+  function("makeLiteralDecimal", &make_literal_decimal);
   function("makeLiteralDouble", &make_literal_double);
   function("makeLiteralFloat", &make_literal_float);
   function("makeLiteralInt16", &make_literal_int16_t);
   function("makeLiteralInt32", &make_literal_int32_t);
   function("makeLiteralInt64", &make_literal_int64_t);
   function("makeLiteralInt8", &make_literal_int8_t);
+  function("makeLiteralString", &make_literal_string);
   function("makeLiteralUInt16", &make_literal_uint16_t);
   function("makeLiteralUInt32", &make_literal_uint32_t);
   function("makeLiteralUInt64", &make_literal_uint64_t);
@@ -458,7 +459,6 @@ EMSCRIPTEN_BINDINGS() {
            &make_projector_with_selection_vector_mode);
   function("makeReader", &make_reader);
   function("makeSchema", &make_schema);
-  function("makeStringLiteral", &make_string_literal);
   function("projectorEvaluate", &projector_evaluate);
   function("projectorEvaluateWithSelectionVector",
            &projector_evaluate_with_selection_vector);
