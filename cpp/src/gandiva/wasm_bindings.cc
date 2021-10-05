@@ -92,6 +92,23 @@ DataTypePtr type_binary() { return arrow::binary(); }
 
 DataTypePtr type_large_binary() { return arrow::large_binary(); }
 
+DataTypePtr type_duration(arrow::TimeUnit::type unit) { return arrow::duration(unit); }
+
+DataTypePtr type_day_time_interval() { return arrow::day_time_interval(); }
+
+DataTypePtr type_month_interval() { return arrow::month_interval(); }
+
+DataTypePtr type_timestamp(arrow::TimeUnit::type unit) { return timestamp(unit); }
+
+DataTypePtr type_timestamp_timezone(arrow::TimeUnit::type unit,
+                                    const std::string& timezone) {
+  return timestamp(unit, timezone);
+}
+
+DataTypePtr type_time32(arrow::TimeUnit::type unit) { return time32(unit); }
+
+DataTypePtr type_time64(arrow::TimeUnit::type unit) { return time64(unit); }
+
 DataTypePtr type_date32() { return arrow::date32(); }
 
 DataTypePtr type_date64() { return arrow::date64(); }
@@ -412,6 +429,12 @@ EMSCRIPTEN_BINDINGS() {
       .value("UINT64", SelectionVector::MODE_UINT64)
       .value("MAX", SelectionVector::MODE_MAX);
 
+  enum_<arrow::TimeUnit::type>("TimeUnit")
+      .value("SECOND", arrow::TimeUnit::SECOND)
+      .value("MILLI", arrow::TimeUnit::MILLI)
+      .value("MICRO", arrow::TimeUnit::MICRO)
+      .value("NANO", arrow::TimeUnit::NANO);
+
   function("arrayVectorToBuffer", &array_vector_to_buffer);
   function("batchNumColumns", &batch_num_columns);
   function("batchNumRows", &batch_num_rows);
@@ -479,6 +502,8 @@ EMSCRIPTEN_BINDINGS() {
   function("typeBoolean", &type_boolean);
   function("typeDate32", &type_date32);
   function("typeDate64", &type_date64);
+  function("typeDayTimeInterval", &type_day_time_interval);
+  function("typeDuration", &type_duration);
   function("typeFloat16", &type_float16);
   function("typeFloat32", &type_float32);
   function("typeFloat64", &type_float64);
@@ -488,7 +513,12 @@ EMSCRIPTEN_BINDINGS() {
   function("typeInt8", &type_int8);
   function("typeLargeBinary", &type_large_binary);
   function("typeLargeUTF8", &type_large_utf8);
+  function("typeMonthInterval", &type_month_interval);
   function("typeNull", &type_null);
+  function("typeTime32", &type_time32);
+  function("typeTime64", &type_time64);
+  function("typeTimestampTimezone", &type_timestamp_timezone);
+  function("typeTimestamp", &type_timestamp);
   function("typeUInt16", &type_uint16);
   function("typeUInt32", &type_uint32);
   function("typeUInt64", &type_uint64);
