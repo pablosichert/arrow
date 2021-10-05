@@ -267,7 +267,7 @@ if(EMSCRIPTEN)
           -s ASSERTIONS=1 \
           -s MODULARIZE=1 \
           -s EXPORT_ES6=1 \
-          -s EXPORTED_FUNCTIONS=___stack_pointer,_malloc,_free,_snprintf,_memcmp,_gdv_fn_context_set_error_msg \
+          -s EXPORTED_FUNCTIONS=___stack_pointer,_malloc,_free,_snprintf,_memcmp,_gdv_fn_context_set_error_msg,_gdv_fn_populate_varlen_vector \
           -s EXPORTED_RUNTIME_METHODS=FS,ccall \
           -s ENVIRONMENT='web,node' \
           --bind \

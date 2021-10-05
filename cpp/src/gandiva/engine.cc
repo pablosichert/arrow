@@ -369,6 +369,7 @@ void Engine::SetCompiledFunction(llvm::Function* irFunction, SelectionVector::Mo
             memcmp : _memcmp,
             snprintf : _snprintf,
             gdv_fn_context_set_error_msg : _gdv_fn_context_set_error_msg,
+            gdv_fn_populate_varlen_vector : _gdv_fn_populate_varlen_vector,
           }
         });
         Module.jitFunctions = Module.jitFunctions || [];
