@@ -36,7 +36,6 @@
 #include <utility>
 
 #include "arrow/util/logging.h"
-#include "gandiva/selection_vector.h"
 
 #if defined(_MSC_VER)
 #pragma warning(push)
@@ -337,8 +336,43 @@ Status Engine::FinalizeModule() {
   ARROW_RETURN_IF(llvm::verifyModule(*module_, &llvm::errs()),
                   Status::CodeGenError("Module verification failed after optimizer"));
 
+#ifdef __EMSCRIPTEN__
+  {
+    llvm::legacy::PassManager passManager;
+    llvm::MCContext* mcContext;
+    llvm::SmallVector<char, 4096> buffer;
+    llvm::raw_svector_ostream bufferStream(buffer);
+    execution_engine_->getTargetMachine()->addPassesToEmitMC(passManager, mcContext,
+                                                             bufferStream);
+    passManager.run(*module_);
+    EM_ASM(
+        {
+          const offset = $0;
+          const length = $1;
+          const bitcode = new Uint8Array(HEAP8.buffer, offset, length);
+          const module = new WebAssembly.Module(bitcode);
+          const instance = new WebAssembly.Instance(module, {
+            env : {
+              __linear_memory : wasmMemory,
+              __indirect_function_table : wasmTable,
+              __stack_pointer : new WebAssembly.Global({value : 'i32', mutable : true},
+                                                       Module.___stack_pointer),
+              malloc : _malloc,
+              free : _free,
+              memcmp : _memcmp,
+              snprintf : _snprintf,
+              gdv_fn_context_set_error_msg : _gdv_fn_context_set_error_msg,
+              gdv_fn_populate_varlen_vector : _gdv_fn_populate_varlen_vector,
+            }
+          });
+          Module.instance = instance;
+        },
+        buffer.data(), buffer.size_in_bytes());
+  }
+#else
   // do the compilation
   execution_engine_->finalizeObject();
+#endif
   module_finalized_ = true;
 
   return Status::OK();
@@ -348,36 +382,6 @@ void* Engine::CompiledFunction(llvm::Function* irFunction) {
   DCHECK(module_finalized_);
   return execution_engine_->getPointerToFunction(irFunction);
 }
-
-#ifdef __EMSCRIPTEN__
-void Engine::SetCompiledFunction(llvm::Function* irFunction, SelectionVector::Mode mode) {
-  execution_engine_->generateCodeForModule(irFunction->getParent());
-  auto name = irFunction->getFnAttribute("wasm-export-name").getValueAsString();
-  EM_ASM(
-      {
-        const name = UTF8ToString($0);
-        const bitcode = FS.readFile("/jit.wasm");
-        const module = new WebAssembly.Module(bitcode);
-        const instance = new WebAssembly.Instance(module, {
-          env : {
-            __linear_memory : wasmMemory,
-            __indirect_function_table : wasmTable,
-            __stack_pointer : new WebAssembly.Global({value : 'i32', mutable : true},
-                                                     Module.___stack_pointer),
-            malloc : _malloc,
-            free : _free,
-            memcmp : _memcmp,
-            snprintf : _snprintf,
-            gdv_fn_context_set_error_msg : _gdv_fn_context_set_error_msg,
-            gdv_fn_populate_varlen_vector : _gdv_fn_populate_varlen_vector,
-          }
-        });
-        Module.jitFunctions = Module.jitFunctions || [];
-        Module.jitFunctions[name] = instance.exports[name];
-      },
-      name.data());
-}
-#endif
 
 void Engine::AddGlobalMappingForFunc(const std::string& name, llvm::Type* ret_type,
                                      const std::vector<llvm::Type*>& args,

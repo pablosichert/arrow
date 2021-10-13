@@ -87,11 +87,17 @@ Status LLVMGenerator::Build(const ExpressionVector& exprs, SelectionVector::Mode
   for (auto& compiled_expr : compiled_exprs_) {
     auto ir_fn = compiled_expr->GetIRFunction(mode);
 #ifdef __EMSCRIPTEN__
-    engine_->SetCompiledFunction(ir_fn, selection_vector_mode_);
+    auto name = ir_fn->getFnAttribute("wasm-export-name").getValueAsString();
+    auto jit_fn = reinterpret_cast<EvalFunc>(EM_ASM_INT(
+        {
+          const name = UTF8ToString($0);
+          return addFunction(Module.instance.exports[name], ['viiiiij']);
+        },
+        name.data()));
 #else
     auto jit_fn = reinterpret_cast<EvalFunc>(engine_->CompiledFunction(ir_fn));
-    compiled_expr->SetJITFunction(selection_vector_mode_, jit_fn);
 #endif
+    compiled_expr->SetJITFunction(selection_vector_mode_, jit_fn);
   }
 
   return Status::OK();
@@ -131,40 +137,10 @@ Status LLVMGenerator::Execute(const arrow::RecordBatch& record_batch,
       num_output_rows = selection_vector->GetNumSlots();
     }
 
-#ifdef __EMSCRIPTEN__
-    {
-      auto name = compiled_expr->GetIRFunction(mode)
-                      ->getFnAttribute("wasm-export-name")
-                      .getValueAsString();
-      auto* inputs_addr = eval_batch->GetBufferArray();
-      auto* inputs_addr_offsets = eval_batch->GetBufferOffsetArray();
-      auto* local_bitmaps = eval_batch->GetLocalBitMapArray();
-      auto* selection_vector = selection_buffer;
-      auto* context_ptr = eval_batch->GetExecutionContext();
-      auto nrecords = (size_t)num_output_rows;
-
-      EM_ASM(
-          {
-            const name = UTF8ToString($0);
-            const inputs_addr = $1;
-            const inputs_addr_offsets = $2;
-            const local_bitmaps = $3;
-            const selection_vector = $4;
-            const context_ptr = $5;
-            const nrecords = BigInt($6);
-
-            Module.jitFunctions[name](inputs_addr, inputs_addr_offsets, local_bitmaps,
-                                      selection_vector, context_ptr, nrecords);
-          },
-          name.data(), inputs_addr, inputs_addr_offsets, local_bitmaps, selection_vector,
-          context_ptr, nrecords);
-    }
-#else
     EvalFunc jit_function = compiled_expr->GetJITFunction(mode);
     jit_function(eval_batch->GetBufferArray(), eval_batch->GetBufferOffsetArray(),
                  eval_batch->GetLocalBitMapArray(), selection_buffer,
                  (void*)eval_batch->GetExecutionContext(), num_output_rows);
-#endif
 
     // check for execution errors
     ARROW_RETURN_IF(
